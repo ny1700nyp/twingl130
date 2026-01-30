@@ -1,0 +1,391 @@
+🎵 Music & Audio
+String Instruments
+Guitar
+Bass Guitar
+Violin
+Viola
+Cello
+Contrabass (Double Bass)
+Ukulele
+Harp
+Banjo
+Keyboard Instruments
+Piano
+Keyboard
+Organ
+Accordion
+Wind & Brass Instruments
+Flute
+Clarinet
+Oboe
+Bassoon
+Saxophone
+Trumpet
+Trombone
+Horn (French Horn)
+Tuba
+Recorder
+Ocarina
+Pan Flute
+Harmonica
+Percussion & Others
+Drum
+Percussion
+Kalimba
+Handpan
+Vocals
+Vocal/Singing
+Opera
+Rap
+Beatbox
+Voice Acting
+Theory & Production
+Composition/Arrangement
+Songwriting (Lyrics)
+MIDI/Computer Composition
+Sound/Recording
+Harmony (Music Theory)
+Conducting
+DJing
+Genre Specialty
+K-Pop
+J-Pop
+
+🏃 Sports & Fitness
+Fitness & Wellness
+Personal Training (PT)
+Pilates
+Yoga
+Crossfit
+Aerobics
+Jump Rope
+Nutrition/Diet Management
+Sports Instruction
+Exercise Physiology (Health Exercise Manager)
+Ball Sports
+Football
+Soccer
+Basketball
+Baseball
+Tennis
+Golf
+Volleyball
+Badminton
+Table Tennis (Ping Pong)
+Bowling
+Billiards/Pool
+Squash/Racquetball
+Hockey
+Bocce
+Foot Volleyball (Jokgu)
+Pickleball
+Water Sports
+Swimming
+Surfing
+Scuba Diving
+Freediving
+Snorkeling
+Wakeboard
+Water Ski
+Paddleboard (SUP)
+Canoe
+Kayak
+Yacht/Sailing
+Outdoor & Extreme (Land/Snow)
+Marathon/Running
+Track & Field
+Cycling/Bicycle
+Skateboarding
+Inline Skate
+Climbing/Bouldering
+Horse Riding
+Archery
+Shooting
+Gymnastics
+Snowboard
+Skiing
+Ice Skating
+Martial Arts & Self-Defense
+Boxing
+Kickboxing
+Muay Thai
+MMA (Mixed Martial Arts)
+Jiu-Jitsu
+Judo
+Taekwondo
+Karate
+Kung Fu (Chinese Martial Arts)
+Hapkido
+Kendo
+Fencing
+Self-Defense
+Parkour
+Nunchaku
+
+🎨 Arts & Crafts
+Fine Arts & Drawing
+Digital Drawing
+Sketching/Drawing
+Painting (Fine Art)
+Oriental Painting
+Pop Art
+Sculpture
+Webtoon/Comics/Anime
+Kids Art
+Textile & Fabric Crafts
+Knitting
+Crochet
+Sewing
+Sewing Machine
+Embroidery
+Macrame
+Felt Craft
+Ribbon Craft
+Scent & Beauty Crafts
+Candle Craft
+Plaster/Gypsum Craft
+Diffuser
+Perfume Making
+Natural Soap
+Cosmetics Making
+Material Crafts (Wood/Metal/Clay)
+Woodworking
+Metal Craft
+Leather Craft
+Pottery/Ceramics
+Glass Art
+Resin Art
+Rattan Craft
+Furniture Making
+Jewelry/Accessory Making
+Clay Art
+Paper & Decor Crafts
+Origami
+Paper Art/Folding
+Calligraphy
+Flower Arrangement
+Florist
+Balloon Art
+Knot Craft
+Miniature
+Napkin Art
+Folk Art
+Gift Wrapping
+Sand Art
+Neon Craft
+String Art
+Media & Photography
+Photography Shooting
+Photo Editing
+Video Shooting
+Video Editing
+
+💃 Dance & Performance
+Dance Styles
+Ballet
+Contemporary Dance
+Jazz Dance
+Tap Dance
+Modern Dance
+Salsa
+Bachata
+Tango
+Swing Dance
+Dance Sports (Ballroom)
+Zumba
+Urban Dance
+Pole Dance
+Belly Dance
+Hula Dance
+Flamenco
+K-Pop Dance
+J-Pop Dance
+Performance Arts
+Acting
+Musical Theater
+Directing
+Magic
+
+🍳 Food & Drink
+Culinary Arts
+Cooking (General)
+Baking
+Food Carving
+Beverage
+Coffee/Barista
+Tea
+Wine
+Whiskey
+Beer
+Cocktail/Mixology
+Dessert
+Chocolate/Chocolatier
+
+🎓 Academic Tutoring
+Mathematics
+Algebra I
+Geometry
+Algebra II / Trigonometry
+Pre-Calculus
+Calculus
+Statistics
+Integrated Math I, II, III
+Business Math / Financial Algebra
+Science
+Biology
+Chemistry
+Physics
+Environmental Science
+Anatomy & Physiology
+Marine Biology
+English & Language Arts
+English I, II, III, IV
+American Literature
+British Literature
+Creative Writing
+Journalism
+Speech & Debate
+Essay Writing
+Social Studies & History
+World History
+U.S. History
+U.S. Government / Civics
+Economics
+Psychology
+Sociology
+World Languages
+Spanish
+French
+Chinese (Mandarin)
+Japanese
+Korean
+Latin
+Vietnamese
+German
+ASL (American Sign Language)
+Sign Language (General)
+AP (Advanced Placement)
+AP Calculus AB/BC
+AP Statistics
+AP Biology
+AP Chemistry
+AP Physics
+AP English Language
+AP English Literature
+AP US History
+AP World History
+AP Psychology
+AP Computer Science A
+
+💼 Career & Lifestyle
+Career Development
+Resume/CV
+Interview Prep
+Speech/Presentation
+Portfolio
+Career Coaching
+Aptitude Test
+Overseas Employment
+Job Hunting Strategy
+Tech & Skills
+Computer Science
+Coding (Python/Java etc.)
+Engineering
+Robotics
+CAD Design
+Marketing
+Entrepreneurship
+Personal Finance
+Auto Mechanics
+AI (Artificial Intelligence)
+ML (Machine Learning)
+Style & Beauty
+Beauty/Makeup
+Fashion Design
+Modeling
+Personal Shopper
+Tattoo Art
+K-Beauty
+Games & Hobbies
+Chess
+Go (Baduk)
+Korean Chess (Janggi)
+Poker
+Board Games
+Writing
+Handwriting Correction
+Fishing
+Drone
+Darts
+Juggling
+Tarot Cards
+Home & Life
+Gardening/Farming
+Interior Design
+Organizing/Decluttering
+Eastern Astrology/Saju
+DIY Home Repair
+
+🧸 Kids & Early Education
+Reading & Phonics
+Storytelling (Read Aloud)
+Sight Words Games
+Phonics
+Reading Support (Dyslexia)
+Vocabulary Games
+Fun Math
+Board Game Math (Add/Sub)
+Money Concepts (Market Play)
+Multiplication Songs
+Number Sense
+Handwriting
+Pencil Grip Correction
+Cursive Writing
+Print Writing Practice
+Creativity & Sensory Play
+Messy & Sensory
+Kids Art
+Kids Music
+Active Kids
+Bike
+Inline
+Scooter
+Jump Rope Tricks
+Soccer
+T-Ball
+Basketball
+Ballet
+K-Pop
+Kids Yoga
+Meditation
+Creative Movement
+STEM & Logic
+Lego
+Block Coding (Scratch Jr.)
+Robot Building
+Simple Science Experiments
+Chess
+Rubik's Cube
+Checkers
+Board Game
+Playdate in Language
+Korean
+Spanish
+Chinese
+Vietnamese
+German
+English
+Hindi
+Telugu
+Tamil
+Culture
+Dumpling Making
+Taco Making
+Holiday Crafts
+Social & Special Needs
+Social Role Play
+Emotional Regulation & Expression
+Making Friends
+Support
+Homework
+Shadowing
