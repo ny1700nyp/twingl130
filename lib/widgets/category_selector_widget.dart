@@ -226,7 +226,6 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         ),
         // 선택된 항목 표시
         if (widget.selectedItems.isNotEmpty) ...[
-          const Divider(),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -257,7 +256,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 onDeleted: () => _toggleItem(item),
                 deleteIcon: const Icon(Icons.close, size: 18),
                 side: BorderSide(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               );
             }).toList(),
@@ -312,39 +311,63 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: iconData != null
-            ? Icon(iconData, size: 24, color: categoryColor)
-            : Text(
-                category.emoji ?? '📁',
-                style: const TextStyle(fontSize: 20),
-              ),
-        title: Text(
-          category.name,
-          style: const TextStyle(fontSize: 14),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          // Remove the default expansion divider/outline lines.
+          shape: const RoundedRectangleBorder(
+            side: BorderSide(color: Colors.transparent),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+          collapsedShape: const RoundedRectangleBorder(
+            side: BorderSide(color: Colors.transparent),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+          leading: iconData != null
+              ? Icon(iconData, size: 24, color: categoryColor)
+              : Text(
+                  category.emoji ?? '📁',
+                  style: const TextStyle(fontSize: 20),
+                ),
+          title: Text(
+            category.name,
+            style: const TextStyle(fontSize: 14),
+          ),
+          children: category.subItems.map((subItem) {
+            return _buildSubItem(category.name, subItem);
+          }).toList(),
         ),
-        children: category.subItems.map((subItem) {
-          return _buildSubItem(category.name, subItem);
-        }).toList(),
       ),
     );
   }
 
   Widget _buildSubItem(String categoryName, CategorySubItem subItem) {
-    return ExpansionTile(
-      title: Text(
-        subItem.name,
-        style: const TextStyle(fontSize: 13),
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Wrap(
+    // Indent sub-categories like a tabbed hierarchy under the main category.
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        // Remove the default expansion divider/outline lines.
+        shape: const RoundedRectangleBorder(
+          side: BorderSide(color: Colors.transparent),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+        collapsedShape: const RoundedRectangleBorder(
+          side: BorderSide(color: Colors.transparent),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+        tilePadding: const EdgeInsets.only(left: 44, right: 16),
+        childrenPadding: const EdgeInsets.only(left: 56, right: 16, bottom: 12),
+        title: Text(
+          subItem.name,
+          style: const TextStyle(fontSize: 13),
+        ),
+        children: [
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             children: subItem.items.map((item) {
               final isSelected = widget.selectedItems.contains(item);
-              
+
               return FilterChip(
                 label: Text(
                   item,
@@ -363,15 +386,15 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 checkmarkColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 side: BorderSide(
-                  color: isSelected 
-                      ? Theme.of(context).colorScheme.primary 
-                      : Theme.of(context).colorScheme.surfaceVariant,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               );
             }).toList(),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
