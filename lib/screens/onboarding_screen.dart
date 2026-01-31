@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/category_service.dart';
 import '../services/supabase_service.dart';
+import '../utils/time_utils.dart';
 import '../widgets/category_selector_widget.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -334,7 +335,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'teaching_methods': _teachingMethods.toList(),
         'about_me': about.isEmpty ? null : about,
         'main_photo_path': _mainPhotoDataUrl,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': TimeUtils.nowUtcIso(),
       };
 
       await SupabaseService.upsertProfile(payload);

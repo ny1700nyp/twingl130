@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'calendar_tab_screen.dart';
-import 'dashboard_screen.dart';
+import 'calendar_dashboard.dart';
+import 'chat_dashboard.dart';
 import 'home_screen.dart';
-import 'profile_home_screen.dart';
+import '../services/supabase_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -17,57 +18,126 @@ class _MainScreenState extends State<MainScreen> {
   int _chatResetToken = 0;
 
   @override
-  Widget build(BuildContext context) {
-    // Important: each tab screen is already a `Scaffold`. Wrapping with another
-    // `Scaffold` causes nested scaffolds (weird AppBars/layout). So we layout
-    // the tabs + bottom bar directly.
-    return Column(
+  void initState() {
+    super.initState();
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      // Ensure badge is correct even before opening Chat tab.
+      SupabaseService.getChatConversationsCached(user.id);
+    }
+  }
+
+  int _totalUnread(List<Map<String, dynamic>>? conversations) {
+    if (conversations == null) return 0;
+    int total = 0;
+    for (final c in conversations) {
+      total += (c['unread_count'] as num?)?.toInt() ?? 0;
+    }
+    return total;
+  }
+
+  Widget _chatIconWithBadge(int unread) {
+    final show = unread > 0;
+    final label = unread > 99 ? '99+' : unread.toString();
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        Expanded(
-          child: IndexedStack(
-            index: _currentIndex,
-            children: [
-              const HomeScreen(),
-              DashboardScreen(resetToken: _chatResetToken),
-              const CalendarTabScreen(),
-              const ProfileHomeScreen(),
-            ],
+        const Icon(Icons.chat_bubble_outline),
+        if (show)
+          Positioned(
+            right: -6,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              constraints: const BoxConstraints(minWidth: 18),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ),
-        ),
-        BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          currentIndex: _currentIndex,
-          onTap: (idx) {
-            setState(() {
-              // If we are entering Chat tab from another tab, reset filters.
-              if (idx == 1 && _currentIndex != 1) {
-                _chatResetToken += 1;
-              }
-              _currentIndex = idx;
-            });
-          },
-          showSelectedLabels: false,
-          showUnselectedLabels: false,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_outlined),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_month_outlined),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              label: '',
-            ),
-          ],
-        ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          const HomeScreen(),
+          ChatDashboard(resetToken: _chatResetToken),
+          const CalendarDashboard(),
+          const _MorePlaceholder(),
+        ],
+      ),
+      bottomNavigationBar: ValueListenableBuilder<List<Map<String, dynamic>>?>(
+        valueListenable: SupabaseService.chatConversationsCache,
+        builder: (context, convs, _) {
+          final unread = _totalUnread(convs);
+          return BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            currentIndex: _currentIndex,
+            showSelectedLabels: false,
+            showUnselectedLabels: false,
+            onTap: (idx) {
+              setState(() {
+                // If we are entering Chat tab from another tab, reset filters.
+                if (idx == 1 && _currentIndex != 1) {
+                  _chatResetToken += 1;
+                }
+                _currentIndex = idx;
+              });
+            },
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline),
+                label: '',
+              ),
+              BottomNavigationBarItem(
+                icon: _chatIconWithBadge(unread),
+                label: '',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_month_outlined),
+                label: '',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.more_horiz),
+                label: '',
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MorePlaceholder extends StatelessWidget {
+  const _MorePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('More'),
+      ),
+      body: const SafeArea(
+        child: Center(child: Text('Coming soon')),
+      ),
     );
   }
 }

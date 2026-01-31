@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:appinio_swiper/appinio_swiper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../utils/distance_formatter.dart';
 import 'profile_detail_screen.dart';
 
 class GlobalTalentMatchingScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   bool _isLoading = true;
   bool _isEndOfDeck = false;
   List<Map<String, dynamic>> _cards = [];
+  Map<String, dynamic>? _myProfile;
 
   Set<String> _myKeywordsNorm = <String>{};
   final Map<String, ImageProvider> _imageProviderCache = <String, ImageProvider>{};
@@ -31,6 +34,27 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   }
 
   String _norm(String s) => s.trim().toLowerCase();
+
+  double _toRadians(double deg) => deg * (math.pi / 180.0);
+
+  double _haversineMeters({
+    required double lat1,
+    required double lon1,
+    required double lat2,
+    required double lon2,
+  }) {
+    // Earth radius (meters)
+    const r = 6371000.0;
+    final dLat = _toRadians(lat2 - lat1);
+    final dLon = _toRadians(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRadians(lat1)) *
+            math.cos(_toRadians(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return r * c;
+  }
 
   List<String> _stringListFromDynamic(dynamic value) {
     if (value == null) return const [];
@@ -117,6 +141,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     }
 
     final myProfile = await SupabaseService.getCurrentUserProfile();
+    _myProfile = myProfile;
     final userType = (myProfile?['user_type'] as String?)?.trim().toLowerCase();
     if (userType == null || userType.isEmpty) {
       if (!mounted) return;
@@ -140,6 +165,20 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       currentUserId: user.id,
       limit: 100,
     );
+
+    // Add distance_meters client-side for privacy-friendly display in UI.
+    // We intentionally bucket the display later via formatDistanceMeters().
+    final myLat = SupabaseService.lastKnownLocation.value?.lat ?? (myProfile?['latitude'] as num?)?.toDouble();
+    final myLon = SupabaseService.lastKnownLocation.value?.lon ?? (myProfile?['longitude'] as num?)?.toDouble();
+    if (myLat != null && myLon != null) {
+      for (final p in cards) {
+        final lat = (p['latitude'] as num?)?.toDouble();
+        final lon = (p['longitude'] as num?)?.toDouble();
+        if (lat != null && lon != null) {
+          p['distance_meters'] = _haversineMeters(lat1: myLat, lon1: myLon, lat2: lat, lon2: lon);
+        }
+      }
+    }
 
     if (!mounted) return;
     await _precacheTopImages(cards);
@@ -172,6 +211,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
         swipedUserId: swipedUserId,
         currentUserId: currentUser.id,
         isMatch: isMatch,
+        swipedProfile: card,
       );
 
       if (!mounted) return;
@@ -282,6 +322,9 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     final name = p['name'] as String? ?? 'Unknown';
     final matchCount = (p['match_count'] as int?) ?? 0;
 
+    final distMeters = (p['distance_meters'] as num?)?.toDouble();
+    final distanceLabel = distMeters == null ? '' : 'Within ${formatDistanceMeters(distMeters)}';
+
     final talents = _stringListFromDynamic(p['talents']);
     final photoPath = _pickMainPhoto(p);
     final imageProvider = _imageProviderFromPath(photoPath);
@@ -289,7 +332,12 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ProfileDetailScreen(profile: p)),
+          MaterialPageRoute(
+            builder: (_) => ProfileDetailScreen(
+              profile: p,
+              currentUserProfile: _myProfile,
+            ),
+          ),
         );
       },
       child: Card(
@@ -338,15 +386,34 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (distanceLabel.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            distanceLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.90),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Row(

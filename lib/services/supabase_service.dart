@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'persistent_cache.dart';
+import '../utils/time_utils.dart';
 
 class SupabaseService {
   static final SupabaseClient supabase = Supabase.instance.client;
@@ -249,7 +250,7 @@ class SupabaseService {
 
     final payload = Map<String, dynamic>.from(profile);
     payload['user_id'] = user.id;
-    payload['updated_at'] = DateTime.now().toIso8601String();
+    payload['updated_at'] = TimeUtils.nowUtcIso();
 
     await supabase.from('profiles').upsert(payload, onConflict: 'user_id');
   }
@@ -275,11 +276,18 @@ class SupabaseService {
     required String currentUserId,
     required String swipedUserId,
   }) async {
-    await supabase
+    final res = await supabase
         .from('matches')
         .delete()
         .eq('user_id', currentUserId)
-        .eq('swiped_user_id', swipedUserId);
+        .eq('swiped_user_id', swipedUserId)
+        .eq('is_match', true)
+        // Ask PostgREST to return deleted rows so we can detect RLS-denied deletes (0 rows).
+        .select('id');
+
+    if (res.isEmpty) {
+      throw Exception('No rows deleted. Check matches RLS DELETE policy.');
+    }
   }
 
   /// 사용자 타입에 따른 conversation 목록 (trainer_id/trainee_id)
@@ -334,8 +342,8 @@ class SupabaseService {
           .eq('conversation_id', conversationId)
           .order('created_at', ascending: false)
           .limit(1);
-      if (response is List && response.isNotEmpty) {
-        return Map<String, dynamic>.from(response.first);
+      if (response.isNotEmpty) {
+        return _normalizeMessageRow(Map<String, dynamic>.from(response.first));
       }
       return null;
     } catch (e) {
@@ -354,8 +362,8 @@ class SupabaseService {
           .eq('type', 'request')
           .order('created_at', ascending: true)
           .limit(1);
-      if (response is List && response.isNotEmpty) {
-        return Map<String, dynamic>.from(response.first);
+      if (response.isNotEmpty) {
+        return _normalizeMessageRow(Map<String, dynamic>.from(response.first));
       }
       return null;
     } catch (e) {
@@ -373,7 +381,7 @@ class SupabaseService {
           .eq('conversation_id', conversationId)
           .neq('sender_id', currentUserId)
           .eq('is_read', false);
-      if (response is List) return response.length;
+      return response.length;
       return 0;
     } catch (e) {
       // is_read 컬럼이 없다면 0으로 fallback
@@ -414,7 +422,8 @@ class SupabaseService {
             .order('created_at', ascending: false)
             .limit(limit);
         if (response is! List) return [];
-        final list = response.map((e) => Map<String, dynamic>.from(e)).toList();
+        final list =
+            response.map((e) => _normalizeMessageRow(Map<String, dynamic>.from(e))).toList();
         return list.reversed.toList();
       }
 
@@ -424,11 +433,22 @@ class SupabaseService {
           .eq('conversation_id', conversationId)
           .order('created_at', ascending: true);
       if (response is! List) return [];
-      return response.map((e) => Map<String, dynamic>.from(e)).toList();
+      return response.map((e) => _normalizeMessageRow(Map<String, dynamic>.from(e))).toList();
     } catch (e) {
       print('Failed to get messages: $e');
       return [];
     }
+  }
+
+  /// Normalize message rows across schema versions.
+  /// DB schema uses `messages.content` but older app code used `message_text`.
+  static Map<String, dynamic> _normalizeMessageRow(Map<String, dynamic> m) {
+    final content = (m['content'] as String?) ?? (m['message_text'] as String?);
+    if (content != null) {
+      m['content'] = content;
+      m['message_text'] = content;
+    }
+    return m;
   }
 
   /// 메시지 보내기 (type: text/system/request)
@@ -437,15 +457,56 @@ class SupabaseService {
     required String senderId,
     required String messageText,
     required String type,
+    Map<String, dynamic>? metadata,
   }) async {
-    await supabase.from('messages').insert({
+    final base = <String, dynamic>{
       'conversation_id': conversationId,
       'sender_id': senderId,
-      'message_text': messageText,
       'type': type,
       'is_read': false,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+      'created_at': TimeUtils.nowUtcIso(),
+    };
+    if (metadata != null && metadata.isNotEmpty) {
+      base['metadata'] = metadata;
+    }
+    try {
+      // Newer schema: `content`
+      await supabase.from('messages').insert({
+        ...base,
+        'content': messageText,
+      });
+    } catch (e) {
+      // Backward compatibility: some older schemas used `message_text`.
+      final msg = e.toString();
+      final looksLikeMissingContentColumn =
+          msg.contains('column') && msg.contains('content') && (msg.contains('does not exist') || msg.contains('not exist'));
+      if (!looksLikeMissingContentColumn) rethrow;
+
+      await supabase.from('messages').insert({
+        ...base,
+        'message_text': messageText,
+      });
+    }
+  }
+
+  static String? _clientIdFromMetadata(dynamic metadata) {
+    try {
+      if (metadata == null) return null;
+      if (metadata is Map) {
+        final m = Map<String, dynamic>.from(metadata);
+        return m['client_id']?.toString();
+      }
+      if (metadata is String && metadata.isNotEmpty) {
+        final decoded = jsonDecode(metadata);
+        if (decoded is Map) {
+          final m = Map<String, dynamic>.from(decoded);
+          return m['client_id']?.toString();
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+    return null;
   }
 
   /// 상대가 보낸 메시지 읽음 처리
@@ -470,18 +531,51 @@ class SupabaseService {
     required String skill,
     required String method,
   }) async {
-    // 1) existing conversation?
+    // 1) Find existing conversations between the same pair.
+    //
+    // IMPORTANT:
+    // - If there is already an "accepted" conversation, always reuse it so future requests
+    //   do NOT require accept/decline again and chat stays enabled.
+    // - If DB accidentally contains multiple rows (e.g., UNIQUE not applied historically),
+    //   prefer an accepted one; otherwise fall back to the most recent.
     final existing = await supabase
         .from('conversations')
         .select()
         .eq('trainer_id', trainerId)
         .eq('trainee_id', traineeId)
         .order('created_at', ascending: false)
-        .limit(1);
+        .limit(10);
 
     String conversationId;
+    String? chosenStatus;
+    bool hasAcceptedConversation = false;
+
     if (existing is List && existing.isNotEmpty) {
-      conversationId = existing.first['id'] as String;
+      final list = existing.map((e) => Map<String, dynamic>.from(e)).toList();
+
+      Map<String, dynamic>? accepted;
+      for (final c in list) {
+        final s = (c['status']?.toString() ?? '').trim().toLowerCase();
+        if (s == 'accepted') {
+          accepted = c;
+          hasAcceptedConversation = true;
+          break;
+        }
+      }
+
+      final chosen = accepted ?? list.first;
+      conversationId = chosen['id'] as String;
+      chosenStatus = (chosen['status']?.toString() ?? '').trim().toLowerCase();
+
+      // If no accepted relationship exists yet and we were previously declined,
+      // reopen the request flow by switching back to pending.
+      if (!hasAcceptedConversation && chosenStatus == 'declined') {
+        await supabase.from('conversations').update({
+          'status': 'pending',
+          'updated_at': TimeUtils.nowUtcIso(),
+        }).eq('id', conversationId);
+        chosenStatus = 'pending';
+      }
     } else {
       final created = await supabase
           .from('conversations')
@@ -489,12 +583,13 @@ class SupabaseService {
             'trainer_id': trainerId,
             'trainee_id': traineeId,
             'status': 'pending',
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
+            'created_at': TimeUtils.nowUtcIso(),
+            'updated_at': TimeUtils.nowUtcIso(),
           })
           .select()
           .single();
       conversationId = created['id'] as String;
+      chosenStatus = 'pending';
     }
 
     await sendMessage(
@@ -502,21 +597,42 @@ class SupabaseService {
       senderId: traineeId,
       messageText: 'Request: $skill ($method)',
       type: 'request',
+      metadata: <String, dynamic>{
+        'kind': 'training_request',
+        'skill': skill,
+        'method': method,
+        // If we are already accepted, this request should not trigger accept/decline UX.
+        'is_followup': (chosenStatus == 'accepted'),
+      },
     );
+
+    // If this conversation is already accepted, still prompt both users to discuss scheduling.
+    if (chosenStatus == 'accepted') {
+      await sendMessage(
+        conversationId: conversationId,
+        senderId: traineeId,
+        messageText: 'Please discuss your schedule.',
+        type: 'system',
+        metadata: const <String, dynamic>{
+          'kind': 'schedule_prompt',
+          'source': 'followup_request',
+        },
+      );
+    }
     return conversationId;
   }
 
   static Future<void> acceptTrainingRequest(String conversationId) async {
     await supabase
         .from('conversations')
-        .update({'status': 'accepted', 'updated_at': DateTime.now().toIso8601String()})
+        .update({'status': 'accepted', 'updated_at': TimeUtils.nowUtcIso()})
         .eq('id', conversationId);
   }
 
   static Future<void> declineTrainingRequest(String conversationId) async {
     await supabase
         .from('conversations')
-        .update({'status': 'declined', 'updated_at': DateTime.now().toIso8601String()})
+        .update({'status': 'declined', 'updated_at': TimeUtils.nowUtcIso()})
         .eq('id', conversationId);
   }
 
@@ -528,7 +644,6 @@ class SupabaseService {
           .from('conversations')
           .select()
           .or('trainer_id.eq.$userId,trainee_id.eq.$userId');
-      if (response is! List) return [];
       return response.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       print('Failed to get unified conversations: $e');
@@ -569,10 +684,12 @@ class SupabaseService {
             m['other_profile'] = Map<String, dynamic>.from(m['other_profile'] as Map);
           }
           if (m['latest_message'] is Map) {
-            m['latest_message'] = Map<String, dynamic>.from(m['latest_message'] as Map);
+            m['latest_message'] =
+                _normalizeMessageRow(Map<String, dynamic>.from(m['latest_message'] as Map));
           }
           if (m['request_message'] is Map) {
-            m['request_message'] = Map<String, dynamic>.from(m['request_message'] as Map);
+            m['request_message'] =
+                _normalizeMessageRow(Map<String, dynamic>.from(m['request_message'] as Map));
           }
           return m;
         }).toList();
@@ -722,16 +839,35 @@ class SupabaseService {
   }) {
     final notifier = chatMessagesCacheForConversation(conversationId);
     final list = List<Map<String, dynamic>>.from(notifier.value ?? const []);
-    final id = message['id']?.toString();
+    final msg = _normalizeMessageRow(Map<String, dynamic>.from(message));
+    final id = msg['id']?.toString();
+    final senderId = msg['sender_id']?.toString();
+    final clientId = _clientIdFromMetadata(msg['metadata']);
+
+    // Reconcile optimistic local message with server message (prevents double display).
+    if (clientId != null &&
+        clientId.isNotEmpty &&
+        id != null &&
+        id.isNotEmpty &&
+        !id.startsWith('local-')) {
+      list.removeWhere((m) {
+        final mid = m['id']?.toString() ?? '';
+        if (!mid.startsWith('local-')) return false;
+        final mClientId = _clientIdFromMetadata(m['metadata']);
+        if (mClientId != clientId) return false;
+        if (senderId == null || senderId.isEmpty) return true;
+        return (m['sender_id']?.toString() ?? '') == senderId;
+      });
+    }
 
     int idx = -1;
     if (id != null && id.isNotEmpty) {
       idx = list.indexWhere((m) => m['id']?.toString() == id);
     }
     if (idx >= 0) {
-      list[idx] = Map<String, dynamic>.from(message);
+      list[idx] = msg;
     } else {
-      list.add(Map<String, dynamic>.from(message));
+      list.add(msg);
     }
 
     list.sort((a, b) {
@@ -810,7 +946,7 @@ class SupabaseService {
       'schedule_state': newState,
       'trainer_schedule_agreed': trainerAgreed,
       'trainee_schedule_agreed': traineeAgreed,
-      'updated_at': DateTime.now().toIso8601String(),
+      'updated_at': TimeUtils.nowUtcIso(),
     };
 
     final updated = await supabase
@@ -836,11 +972,11 @@ class SupabaseService {
       'user_id': userId,
       'title': title,
       'description': description,
-      'start_time': startTime.toIso8601String(),
-      'end_time': endTime.toIso8601String(),
+      'start_time': TimeUtils.toUtcIso(startTime),
+      'end_time': TimeUtils.toUtcIso(endTime),
       'conversation_id': conversationId,
-      'created_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
+      'created_at': TimeUtils.nowUtcIso(),
+      'updated_at': TimeUtils.nowUtcIso(),
     });
   }
 
@@ -851,15 +987,15 @@ class SupabaseService {
     required DateTime endDate,
   }) async {
     try {
+      final startUtc = startDate.toUtc();
+      final endUtc = endDate.toUtc();
       final response = await supabase
           .from('calendar_events')
           .select()
           .eq('user_id', userId)
-          .gte('start_time', startDate.toIso8601String())
-          .lt('start_time', endDate.toIso8601String())
+          .gte('start_time', startUtc.toIso8601String())
+          .lt('start_time', endUtc.toIso8601String())
           .order('start_time', ascending: true);
-
-      if (response is! List) return [];
       return response.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       print('Failed to get calendar events: $e');
@@ -875,7 +1011,10 @@ class SupabaseService {
     int limit = 100,
   }) async {
     try {
-      final targetType = userType == 'trainer' ? 'trainee' : 'trainer';
+      // Product requirement:
+      // Talent matching should only match "my talents" with TRAINER talents.
+      // Do not show / match trainees in Talent Match results.
+      final targetType = 'trainer';
 
       // already swiped
       final swiped = await supabase
@@ -883,20 +1022,17 @@ class SupabaseService {
           .select('swiped_user_id')
           .eq('user_id', currentUserId);
       final swipedIds = <String>{};
-      if (swiped is List) {
-        for (final e in swiped) {
-          final id = (e as Map)['swiped_user_id'] as String?;
-          if (id != null && id.isNotEmpty) swipedIds.add(id);
-        }
+      for (final e in swiped) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) swipedIds.add(id);
       }
-
+    
       final response = await supabase
           .from('profiles')
           .select()
           .eq('user_type', targetType)
           .neq('user_id', currentUserId)
           .limit(limit);
-      if (response is! List) return [];
 
       final keywords = userTalentsOrGoals.map((e) => e.toLowerCase()).toSet();
       final list = response
@@ -913,9 +1049,22 @@ class SupabaseService {
         return set.intersection(keywords).length;
       }
 
-      // sort by match count desc
-      list.sort((a, b) => matchCount(b).compareTo(matchCount(a)));
-      return list;
+      // Compute + attach match_count so UI can use it.
+      for (final p in list) {
+        p['match_count'] = matchCount(p);
+      }
+
+      // Talent match screen requirement:
+      // - do NOT show non-matching cards (match_count == 0)
+      // - sort by match_count desc (only)
+      final filtered = list.where((p) => (p['match_count'] as int? ?? 0) > 0).toList();
+      filtered.sort((a, b) {
+        final ma = (a['match_count'] as int? ?? 0);
+        final mb = (b['match_count'] as int? ?? 0);
+        return mb.compareTo(ma);
+      });
+
+      return filtered;
     } catch (e) {
       print('Failed to get talent matching cards: $e');
       return [];
@@ -930,6 +1079,7 @@ class SupabaseService {
     required String swipedUserId,
     required String currentUserId,
     required bool isMatch,
+    Map<String, dynamic>? swipedProfile,
   }) async {
     print('========================================');
     print('SupabaseService.saveMatch 시작');
@@ -943,7 +1093,7 @@ class SupabaseService {
         'user_id': currentUserId,
         'swiped_user_id': swipedUserId,
         'is_match': isMatch,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': TimeUtils.nowUtcIso(),
       };
       
       print('저장할 데이터:');
@@ -983,21 +1133,42 @@ class SupabaseService {
       print('반환된 결과 타입: ${result.runtimeType}');
       print('반환된 결과: $result');
       
-      if (result != null) {
-        if (result is List) {
-          if (result.isNotEmpty) {
-            print('✓ 저장 성공: 데이터가 반환되었습니다');
-            print('  반환된 레코드 수: ${result.length}');
-            print('  첫 번째 레코드: ${result[0]}');
-          } else {
-            print('⚠ 경고: 빈 리스트가 반환되었습니다');
-          }
-        } else {
+      if (result is List) {
+        if (result.isNotEmpty) {
           print('✓ 저장 성공: 데이터가 반환되었습니다');
-          print('  반환된 데이터: $result');
+          print('  반환된 레코드 수: ${result.length}');
+          print('  첫 번째 레코드: ${result[0]}');
+        } else {
+          print('⚠ 경고: 빈 리스트가 반환되었습니다');
         }
       } else {
-        print('⚠ 경고: null이 반환되었습니다');
+        print('✓ 저장 성공: 데이터가 반환되었습니다');
+        print('  반환된 데이터: $result');
+      }
+    
+      // If user liked someone, update favorites cache immediately (no DB).
+      // This prevents Home flicker and makes UI reflect likes instantly.
+      if (isMatch) {
+        try {
+          final userId = currentAuthUser.id;
+          final existing = favoriteTrainersCache.value ?? const <Map<String, dynamic>>[];
+          final next = existing.map((e) => Map<String, dynamic>.from(e)).toList();
+
+          if (swipedProfile != null) {
+            final swipedId = (swipedProfile['user_id'] as String?) ?? swipedUserId;
+            final already = next.any((p) => (p['user_id'] as String?) == swipedId);
+            if (!already) {
+              next.add(Map<String, dynamic>.from(swipedProfile));
+              await setFavoriteTrainersCacheForUser(userId, next);
+            }
+          }
+
+          // Background verification (cheap). If DB and cache already match,
+          // this won't trigger a full favorites re-fetch.
+          Future.microtask(() => refreshBootstrapCachesIfChanged(userId));
+        } catch (_) {
+          // Ignore cache update errors; DB write already succeeded.
+        }
       }
       
       print('========================================');
@@ -1094,8 +1265,6 @@ class SupabaseService {
         .select('swiped_user_id')
         .eq('user_id', userId)
         .eq('is_match', true);
-
-    if (matchesResponse is! List) return [];
     final likedUserIds = matchesResponse
         .map((e) => Map<String, dynamic>.from(e)['swiped_user_id'] as String? ?? '')
         .where((id) => id.isNotEmpty)
@@ -1104,7 +1273,6 @@ class SupabaseService {
 
     final profilesResponse =
         await supabase.from('profiles').select().inFilter('user_id', likedUserIds);
-    if (profilesResponse is! List) return [];
     final profiles = profilesResponse.map((e) => Map<String, dynamic>.from(e)).toList();
     _sortByName(profiles);
     return profiles;
@@ -1127,6 +1295,18 @@ class SupabaseService {
     favoriteTrainersCache.value = fresh;
     await _persistFavoritesToDisk(userId, fresh);
     return fresh;
+  }
+
+  /// Update favorites cache immediately (no DB), and persist to disk.
+  static Future<void> setFavoriteTrainersCacheForUser(
+    String userId,
+    List<Map<String, dynamic>> favorites,
+  ) async {
+    final copy = favorites.map((e) => Map<String, dynamic>.from(e)).toList();
+    _sortByName(copy);
+    _favoriteTrainersCacheUserId = userId;
+    favoriteTrainersCache.value = copy;
+    await _persistFavoritesToDisk(userId, copy);
   }
 
   /// Throttled background refresh: only updates caches if DB changed.
@@ -1162,13 +1342,11 @@ class SupabaseService {
             .eq('user_id', userId)
             .eq('is_match', true);
         final dbIds = <String>[];
-        if (matches is List) {
-          for (final e in matches) {
-            final id = (e as Map)['swiped_user_id'] as String?;
-            if (id != null && id.isNotEmpty) dbIds.add(id);
-          }
+        for (final e in matches) {
+          final id = (e as Map)['swiped_user_id'] as String?;
+          if (id != null && id.isNotEmpty) dbIds.add(id);
         }
-        dbIds.sort();
+              dbIds.sort();
         final cachedFavIds = (favoriteTrainersCache.value ?? const <Map<String, dynamic>>[])
             .map((p) => p['user_id'] as String? ?? '')
             .where((id) => id.isNotEmpty)
@@ -1225,7 +1403,7 @@ class SupabaseService {
           .update({
             'latitude': latitude,
             'longitude': longitude,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': TimeUtils.nowUtcIso(),
           })
           .eq('user_id', user.id);
 
@@ -1314,16 +1492,14 @@ class SupabaseService {
             .select('swiped_user_id')
             .eq('user_id', currentUserId);
 
-        if (swipedResponse is List) {
-          swipedUserIds = swipedResponse
-              .map((e) {
-                final map = Map<String, dynamic>.from(e);
-                return map['swiped_user_id'] as String? ?? '';
-              })
-              .where((id) => id.isNotEmpty)
-              .toList();
-        }
-      } catch (e) {
+        swipedUserIds = swipedResponse
+            .map((e) {
+              final map = Map<String, dynamic>.from(e);
+              return map['swiped_user_id'] as String? ?? '';
+            })
+            .where((id) => id.isNotEmpty)
+            .toList();
+            } catch (e) {
         print('스와이프 기록 가져오기 실패: $e');
       }
 
@@ -1338,16 +1514,14 @@ class SupabaseService {
           .neq('user_id', currentUserId);
 
       List<Map<String, dynamic>> cards = [];
-      if (response is List) {
-        cards = response
-            .map((e) => Map<String, dynamic>.from(e))
-            .where((profile) {
-              final userId = profile['user_id'] as String? ?? '';
-              return !swipedUserIds.contains(userId);
-            })
-            .toList();
-      }
-
+      cards = response
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((profile) {
+            final userId = profile['user_id'] as String? ?? '';
+            return !swipedUserIds.contains(userId);
+          })
+          .toList();
+    
       // 거리 계산 및 정렬 (클라이언트에서 처리)
       for (var card in cards) {
         final lat = (card['latitude'] as num?)?.toDouble();
@@ -1445,12 +1619,6 @@ class SupabaseService {
 
       print('matchesResponse 타입: ${matchesResponse.runtimeType}');
       print('matchesResponse 내용: $matchesResponse');
-
-      if (matchesResponse is! List) {
-        print('ERROR: matchesResponse가 List가 아닙니다!');
-        print('  타입: ${matchesResponse.runtimeType}');
-        return [];
-      }
 
       final likedUserIds = matchesResponse
           .map((e) {
@@ -1574,10 +1742,8 @@ class SupabaseService {
 
       final response = await query;
       
-      if (response is List) {
-        return response.isNotEmpty;
-      }
-      
+      return response.isNotEmpty;
+          
       return false;
     } catch (e) {
       print('Failed to check user agreement: $e');
@@ -1602,7 +1768,7 @@ class SupabaseService {
         'user_id': user.id,
         'agreement_type': agreementType,
         'version': version,
-        'agreed_at': DateTime.now().toIso8601String(),
+        'agreed_at': TimeUtils.nowUtcIso(),
       });
 
       print('User agreement saved: $agreementType, version: $version');

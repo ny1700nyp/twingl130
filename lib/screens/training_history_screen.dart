@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
-import '../theme/app_theme.dart';
 import 'chat_screen.dart';
+import '../utils/time_utils.dart';
 
 class TrainingHistoryScreen extends StatefulWidget {
   final String otherUserId;
@@ -21,6 +25,148 @@ class TrainingHistoryScreen extends StatefulWidget {
 class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
   List<Map<String, dynamic>> _conversations = [];
   bool _isLoading = true;
+
+  ImageProvider? _imageProviderFromPath(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('data:image')) {
+      try {
+        return MemoryImage(base64Decode(path.split(',').last));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return NetworkImage(path);
+    }
+    if (!kIsWeb) {
+      // Local file paths not supported here yet (web-safe).
+      return null;
+    }
+    return null;
+  }
+
+  String _normalizedStatus(Map<String, dynamic> c) {
+    return (c['status']?.toString() ?? '').trim().toLowerCase();
+  }
+
+  DateTime? _latestMessageAtLocal(Map<String, dynamic> c) {
+    final latest = c['latest_message'];
+    if (latest is Map) {
+      return TimeUtils.tryParseIsoToLocal((latest['created_at'] as String?) ?? '');
+    }
+    return TimeUtils.tryParseIsoToLocal((c['updated_at'] as String?) ?? '');
+  }
+
+  String _formatRightCornerTime(Map<String, dynamic> c) {
+    final dt = _latestMessageAtLocal(c);
+    if (dt == null) return '';
+    final now = TimeUtils.nowLocal();
+    final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    if (sameDay) return 'Today';
+    return DateFormat('yyyy-MM-dd HH:mm').format(dt);
+  }
+
+  String _stripDeclinedPrefix(String s) {
+    final text = s.trim();
+    final m = RegExp(r'^(declined|declided)\s*:?\s*', caseSensitive: false).firstMatch(text);
+    if (m == null) return text;
+    return text.substring(m.end).trim();
+  }
+
+  String _previewText(Map<String, dynamic>? latest) {
+    if (latest == null) return '';
+    final type = (latest['type'] as String?) ?? 'text';
+    final text = (latest['content'] as String?) ?? (latest['message_text'] as String?) ?? '';
+    if (type == 'request') return 'Request';
+    if (type == 'system') {
+      final metadata = latest['metadata'];
+      String? kind;
+      try {
+        if (metadata is Map) {
+          kind = (metadata['kind'] as String?)?.toString();
+        } else if (metadata is String && metadata.isNotEmpty) {
+          final decoded = jsonDecode(metadata);
+          if (decoded is Map) kind = (decoded['kind'] as String?)?.toString();
+        }
+      } catch (_) {}
+      if (kind == 'decline_reason') return _stripDeclinedPrefix(text);
+      if (RegExp(r'^(declined|declided)\s*:?', caseSensitive: false).hasMatch(text.trim())) {
+        return _stripDeclinedPrefix(text);
+      }
+      return text;
+    }
+    return text;
+  }
+
+  Widget _roleIconBadge(BuildContext context, {required bool isTutor}) {
+    const tutorGold = Color(0xFFF59E0B);
+    const studentBlue = Color(0xFF4285F4); // Google blue
+    final bg = isTutor ? tutorGold : studentBlue;
+    final label = isTutor ? 'T' : 'S';
+
+    return Positioned(
+      right: -1,
+      top: -1,
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 11,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(BuildContext context, String status) {
+    final s = status.trim().toLowerCase();
+    if (s == 'accepted' || s.isEmpty) return const SizedBox.shrink();
+
+    late final Color bg;
+    late final Color fg;
+    late final String label;
+
+    if (s == 'declined') {
+      bg = Colors.red.withAlpha(28);
+      fg = Colors.red.shade700;
+      label = 'Declined';
+    } else if (s == 'pending') {
+      bg = Colors.orange.withAlpha(30);
+      fg = Colors.orange.shade800;
+      label = 'Pending';
+    } else {
+      bg = Colors.grey.withAlpha(28);
+      fg = Colors.grey.shade700;
+      label = s;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withAlpha(80)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -96,8 +242,12 @@ class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
         if (aMessage == null) return 1;
         if (bMessage == null) return -1;
         
-        final aTime = DateTime.parse(aMessage['created_at'] as String);
-        final bTime = DateTime.parse(bMessage['created_at'] as String);
+        final aTime =
+            TimeUtils.tryParseIsoToLocal(aMessage['created_at'] as String?) ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime =
+            TimeUtils.tryParseIsoToLocal(bMessage['created_at'] as String?) ??
+                DateTime.fromMillisecondsSinceEpoch(0);
         
         return bTime.compareTo(aTime);
       });
@@ -119,87 +269,11 @@ class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
     }
   }
 
-  String _formatMessageTime(DateTime messageTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final messageDate = DateTime(messageTime.year, messageTime.month, messageTime.day);
-    
-    if (messageDate == today) {
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      return 'Today $hour:$minute';
-    } else if (messageDate == yesterday) {
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      return 'Yesterday $hour:$minute';
-    } else {
-      final month = messageTime.month.toString().padLeft(2, '0');
-      final day = messageTime.day.toString().padLeft(2, '0');
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      return '$month/$day $hour:$minute';
-    }
-  }
-
-  Widget _buildStatusChip(String status, BuildContext context) {
-    final theme = Theme.of(context).colorScheme;
-    
-    switch (status) {
-      case 'pending':
-        return Chip(
-          label: const Text('Pending'),
-          backgroundColor: AppTheme.secondaryGold.withOpacity(0.2),
-          labelStyle: const TextStyle(
-            color: AppTheme.secondaryGold,
-            fontWeight: FontWeight.w600,
-          ),
-          side: BorderSide(
-            color: AppTheme.secondaryGold.withOpacity(0.2),
-          ),
-        );
-      case 'accepted':
-        return Chip(
-          label: const Text('Accepted'),
-          backgroundColor: AppTheme.successGreen.withOpacity(0.2),
-          labelStyle: const TextStyle(
-            color: AppTheme.successGreen,
-            fontWeight: FontWeight.w600,
-          ),
-          side: BorderSide(
-            color: AppTheme.successGreen.withOpacity(0.2),
-          ),
-        );
-      case 'declined':
-        return Chip(
-          label: const Text('Declined'),
-          backgroundColor: Colors.red.withOpacity(0.2),
-          labelStyle: const TextStyle(
-            color: Colors.red,
-            fontWeight: FontWeight.w600,
-          ),
-          side: BorderSide(
-            color: Colors.red.withOpacity(0.2),
-          ),
-        );
-      default:
-        return Chip(
-          label: Text(status),
-          backgroundColor: theme.surfaceVariant,
-          labelStyle: TextStyle(
-            color: theme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-          side: BorderSide(
-            color: theme.surfaceVariant,
-          ),
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final otherName = widget.otherProfile?['name'] as String? ?? 'Unknown';
+    final avatarPath = widget.otherProfile?['main_photo_path'] as String?;
+    final avatar = _imageProviderFromPath(avatarPath);
     
     return Scaffold(
       appBar: AppBar(
@@ -234,119 +308,80 @@ class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
                     itemBuilder: (context, index) {
                       final conversation = _conversations[index];
                       final latestMessage = conversation['latest_message'] as Map<String, dynamic>?;
-                      final requestMessage = conversation['request_message'] as Map<String, dynamic>?;
                       final unreadCount = conversation['unread_count'] as int;
-                      final status = conversation['status'] as String? ?? 'pending';
+                      final status = _normalizedStatus(conversation);
                       final isRequester = conversation['is_requester'] as bool? ?? false;
-                      
-                      // Extract talent/skill from request message metadata
-                      String? talent;
-                      if (requestMessage != null) {
-                        final metadata = requestMessage['metadata'] as Map<String, dynamic>?;
-                        talent = metadata?['skill'] as String?;
-                      }
-                      
+                      final isDeclined = status == 'declined';
+                      final rightTime = _formatRightCornerTime(conversation);
+                      final isOtherTutor = isRequester; // if I requested, other is tutor
+
                       return ListTile(
+                        tileColor: isDeclined ? Colors.red.withAlpha(18) : null,
                         leading: Stack(
+                          clipBehavior: Clip.none,
                           children: [
                             CircleAvatar(
-                              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-                              child: Icon(
-                                Icons.school,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                              backgroundImage: avatar,
+                              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              child: avatar == null ? const Icon(Icons.person) : null,
                             ),
-                            if (unreadCount > 0)
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 16,
-                                    minHeight: 16,
-                                  ),
-                                  child: Text(
-                                    unreadCount > 9 ? '9+' : '$unreadCount',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ),
+                            _roleIconBadge(context, isTutor: isOtherTutor),
                           ],
                         ),
-                        title: talent != null && talent.isNotEmpty
-                            ? Row(
-                                children: [
-                                  Icon(
-                                    isRequester ? Icons.send : Icons.inbox,
-                                    size: 14,
-                                    color: isRequester ? const Color(0xFFF59E0B) : Colors.green,
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                otherName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (unreadCount > 0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade700,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  unreadCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      isRequester 
-                                          ? 'Requested: $talent'
-                                          : 'Received: $talent',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: isRequester ? const Color(0xFFF59E0B) : Colors.green,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Text('Training Request'),
-                        subtitle: latestMessage != null
-                            ? Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      latestMessage['content'] as String? ?? '',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _formatMessageTime(
-                                      DateTime.parse(latestMessage['created_at'] as String),
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Text(
-                                'Status: $status',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: status == 'pending'
-                                      ? AppTheme.secondaryGold
-                                      : status == 'accepted'
-                                          ? AppTheme.successGreen
-                                          : status == 'declined'
-                                              ? Colors.red
-                                              : Colors.grey,
                                 ),
                               ),
-                        trailing: _buildStatusChip(status, context),
+                              const SizedBox(width: 6),
+                            ],
+                            _statusChip(context, status),
+                          ],
+                        ),
+                        subtitle: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _previewText(latestMessage),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDeclined ? Colors.red.shade700 : null,
+                                  fontWeight: isDeclined ? FontWeight.w600 : null,
+                                ),
+                              ),
+                            ),
+                            if (rightTime.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                rightTime,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurface.withAlpha(140),
+                                      fontSize: 11,
+                                    ),
+                              ),
+                            ],
+                          ],
+                        ),
                         onTap: () {
                           final currentUser = Supabase.instance.client.auth.currentUser;
                           if (currentUser == null) return;

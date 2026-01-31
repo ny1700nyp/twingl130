@@ -36,6 +36,8 @@ class ProfileDetailScreen extends StatelessWidget {
     }
   }
 
+  String _norm(String s) => s.trim().toLowerCase();
+
   // 나이를 "30대", "40대" 형식으로 변환하는 헬퍼 함수
   String _formatAgeRange(int? age, String? createdAt) {
     if (age == null) return '';
@@ -427,6 +429,10 @@ class ProfileDetailScreen extends StatelessWidget {
       return;
     }
     
+    // Capture parent navigator/messenger (safer than using bottom-sheet context after pop)
+    final parentNavigator = Navigator.of(context);
+    final parentMessenger = ScaffoldMessenger.of(context);
+
     showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -440,7 +446,22 @@ class ProfileDetailScreen extends StatelessWidget {
     ).then((conversationId) {
       if (conversationId == null) return;
       final otherUserId = trainerId;
-      Navigator.of(context).push(
+
+      // Show feedback on the parent scaffold (avoids "no ScaffoldMessenger" errors).
+      parentMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Sent'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Refresh chat dashboard cache in background so the conversation appears immediately.
+      final me = Supabase.instance.client.auth.currentUser;
+      if (me != null) {
+        SupabaseService.refreshChatConversationsIfChanged(me.id);
+      }
+
+      parentNavigator.push(
         MaterialPageRoute(
           builder: (_) => ChatScreen(
             conversationId: conversationId,
@@ -507,7 +528,7 @@ class ProfileDetailScreen extends StatelessWidget {
     final name = profile['name'] as String? ?? 'No name';
     final age = profile['age'] as int?;
     final gender = profile['gender'] as String?;
-    final userType = profile['user_type'] as String? ?? '';
+    final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
     final talents = profile['talents'] as List<dynamic>?;
     final experienceDescription = profile['experience_description'] as String?;
     final teachingMethods = profile['teaching_methods'] as List<dynamic>?;
@@ -524,18 +545,23 @@ class ProfileDetailScreen extends StatelessWidget {
     final profilePhotos = profile['profile_photos'] as List<dynamic>?;
     
     // 현재 사용자의 goals 또는 talents 가져오기
-    final currentUserType = currentUserProfile?['user_type'] as String?;
+    final currentUserType = (currentUserProfile?['user_type'] as String?)?.trim().toLowerCase();
     // DB 통합: trainee의 goal도 talents 필드에 저장 (기존 goals 컬럼은 마이그레이션 동안만 fallback)
-    final currentUserGoals = currentUserType == 'trainee'
+    final List<String> currentUserGoals = currentUserType == 'trainee'
         ? ((currentUserProfile?['talents'] as List<dynamic>?) ??
                 (currentUserProfile?['goals'] as List<dynamic>?) ??
                 const <dynamic>[])
             .map((e) => e.toString())
             .toList()
-        : <String>[];
-    final currentUserTalents = currentUserType == 'trainer'
-        ? (currentUserProfile?['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? []
-        : [];
+        : const <String>[];
+    final List<String> currentUserTalents = currentUserType == 'trainer'
+        ? (currentUserProfile?['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+            const <String>[]
+        : const <String>[];
+
+    // Normalized sets for robust matching (case/whitespace insensitive)
+    final currentUserGoalsNorm = currentUserGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
+    final currentUserTalentsNorm = currentUserTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
 
     // profile_photos가 있으면 사용, 없으면 main_photo_path 사용 (호환성)
     List<String> photos = [];
@@ -756,11 +782,15 @@ class ProfileDetailScreen extends StatelessWidget {
                       children: talents
                           .map((talent) {
                             final talentStr = talent.toString();
-                            // Trainer가 Trainer를 볼 때는 talent-talent, Trainer가 Trainee를 볼 때는 talent-goal
-                            final matchingList = currentUserType == 'trainer' && userType == 'trainer'
-                                ? currentUserTalents  // Trainer-Trainer: talent-talent
-                                : currentUserGoals;    // Trainer-Trainee: talent-goal (또는 Trainee-Trainer: goal-talent)
-                            final isMatched = matchingList.contains(talentStr);
+                            // Highlight chips that match the current user's keywords.
+                            // - trainee viewing trainer: goal ↔ talent
+                            // - trainer viewing trainee: talent ↔ goal (handled in Goals section)
+                            // - trainer viewing trainer: talent ↔ talent
+                            final matchingNorm =
+                                (currentUserType == 'trainer' && userType == 'trainer')
+                                    ? currentUserTalentsNorm
+                                    : currentUserGoalsNorm;
+                            final isMatched = matchingNorm.contains(_norm(talentStr));
                             return _buildProfileChip(
                               context,
                               talentStr,
@@ -878,7 +908,9 @@ class ProfileDetailScreen extends StatelessWidget {
                           .map((goal) {
                             final goalStr = goal.toString();
                             // 현재 사용자(trainer)의 talents와 매칭되는 goal은 강조
-                            final isMatched = currentUserTalents.contains(goalStr);
+                            final isMatched = (currentUserType == 'trainer')
+                                ? currentUserTalentsNorm.contains(_norm(goalStr))
+                                : currentUserGoalsNorm.contains(_norm(goalStr));
                             return _buildProfileChip(
                               context,
                               goalStr,
@@ -1055,7 +1087,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: (_selectedSkill != null && _selectedMethod != null && !_isLoading)
-                          ? () => _sendRequest(context)
+                          ? _sendRequest
                           : null,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1079,7 +1111,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
     );
   }
 
-  Future<void> _sendRequest(BuildContext context) async {
+  Future<void> _sendRequest() async {
     if (_selectedSkill == null || _selectedMethod == null) return;
 
     setState(() {
@@ -1097,26 +1129,19 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
         traineeId: currentUser.id,
         skill: _selectedSkill!,
         method: _selectedMethod!,
-      );
+      ).timeout(const Duration(seconds: 12));
 
-      if (context.mounted) {
-        Navigator.of(context).pop(conversationId);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request sent successfully'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      if (!mounted) return;
+      Navigator.of(context).pop(conversationId);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send request: $e'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      // Use maybeOf to avoid throwing if no ScaffoldMessenger in this subtree.
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text('Failed to send request: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {

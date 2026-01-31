@@ -18,6 +18,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _profiles = [];
   late final VoidCallback _cacheListener;
+  final Set<String> _removing = <String>{};
 
   @override
   void initState() {
@@ -89,25 +90,73 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
   Future<void> _removeFavorite(String otherUserId) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
-    try {
-      await SupabaseService.removeFavorite(
-        currentUserId: user.id,
-        swipedUserId: otherUserId,
-      );
-      await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to remove: $e')),
-      );
+    if (otherUserId.trim().isEmpty) return;
+    if (_removing.contains(otherUserId)) return;
+
+    // Optimistic UI/cache update: remove immediately.
+    final removed = _profiles.firstWhere(
+      (p) => (p['user_id'] as String?) == otherUserId,
+      orElse: () => <String, dynamic>{},
+    );
+
+    setState(() {
+      _removing.add(otherUserId);
+      _profiles = _profiles.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+      _isLoading = false;
+    });
+
+    final cached = SupabaseService.favoriteTrainersCache.value;
+    if (cached != null) {
+      SupabaseService.favoriteTrainersCache.value =
+          cached.where((p) => (p['user_id'] as String?) != otherUserId).toList();
     }
+
+    // DB delete in background
+    () async {
+      try {
+        await SupabaseService.removeFavorite(
+          currentUserId: user.id,
+          swipedUserId: otherUserId,
+        );
+
+        // Minimal DB touching: only verify if needed (throttled).
+        Future.microtask(() => SupabaseService.refreshBootstrapCachesIfChanged(user.id));
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Removed')),
+        );
+      } catch (e) {
+        // If DB delete failed, re-sync from DB (may restore the item).
+        await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove: $e')),
+        );
+
+        // If cache couldn't restore (e.g. offline), at least re-add locally.
+        if (removed.isNotEmpty) {
+          final nowCached = SupabaseService.favoriteTrainersCache.value;
+          if (nowCached == null || !nowCached.any((p) => (p['user_id'] as String?) == otherUserId)) {
+            setState(() {
+              _profiles = [..._profiles, Map<String, dynamic>.from(removed)];
+            });
+          }
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _removing.remove(otherUserId));
+        }
+      }
+    }();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Favorite Trainer'),
+        title: const Text('Edit my Favorite'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -120,9 +169,8 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
                         Center(child: Text('No favorite trainers yet.')),
                       ],
                     )
-                  : ListView.separated(
+                  : ListView.builder(
                       itemCount: _profiles.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, i) {
                         final p = _profiles[i];
                         final name = (p['name'] as String?) ?? 'Unknown';
@@ -134,18 +182,21 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
                             child: avatar == null ? const Icon(Icons.person) : null,
                           ),
                           title: Text(name),
-                          subtitle: Text(otherUserId),
                           trailing: IconButton(
                             tooltip: 'Remove',
                             icon: const Icon(Icons.delete_outline),
-                            onPressed: otherUserId.isEmpty ? null : () => _removeFavorite(otherUserId),
+                            onPressed:
+                                (otherUserId.isEmpty || _removing.contains(otherUserId)) ? null : () => _removeFavorite(otherUserId),
                           ),
                           onTap: otherUserId.isEmpty
                               ? null
                               : () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => PublicProfileScreen(userId: otherUserId),
+                                      builder: (_) => PublicProfileScreen(
+                                        userId: otherUserId,
+                                        currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                      ),
                                     ),
                                   );
                                 },

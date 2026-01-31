@@ -9,6 +9,7 @@
 DROP POLICY IF EXISTS "Users can read own matches" ON matches;
 DROP POLICY IF EXISTS "Users can insert own matches" ON matches;
 DROP POLICY IF EXISTS "Users can update own matches" ON matches;
+DROP POLICY IF EXISTS "Users can delete own matches" ON matches;
 
 -- 2. 기존 인덱스 삭제 (있는 경우)
 DROP INDEX IF EXISTS idx_matches_user_id;
@@ -50,6 +51,11 @@ CREATE POLICY "Users can update own matches"
   ON matches FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- 사용자는 자신의 매치를 삭제할 수 있음 (즐겨찾기 제거)
+CREATE POLICY "Users can delete own matches"
+  ON matches FOR DELETE
+  USING (auth.uid() = user_id);
 
 -- ============================================
 -- 완료!

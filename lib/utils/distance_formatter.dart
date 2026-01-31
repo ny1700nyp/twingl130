@@ -1,6 +1,6 @@
 /// Distance formatting used across the app.
 ///
-/// Bucket rules (legacy):
+/// Bucket rules (privacy-friendly):
 /// - < 100m   => 100m
 /// - < 500m   => 500m
 /// - < 1km    => 1km
@@ -9,7 +9,10 @@
 /// - < 20km   => 20km
 /// - < 50km   => 50km
 /// - < 100km  => 100km
-/// - >= 100km => exact km with 1 decimal
+/// - < 200km  => 200km
+/// - < 500km  => 500km
+/// - < 1000km => 1000km
+/// - >= 1000km => 1000km+
 String formatDistanceMeters(double distanceMeters) {
   if (distanceMeters < 0) return '0m';
 
@@ -29,8 +32,14 @@ String formatDistanceMeters(double distanceMeters) {
     return '50km';
   } else if (distanceMeters < 100000) {
     return '100km';
+  } else if (distanceMeters < 200000) {
+    return '200km';
+  } else if (distanceMeters < 500000) {
+    return '500km';
+  } else if (distanceMeters < 1000000) {
+    return '1000km';
   } else {
-    return '${(distanceMeters / 1000).toStringAsFixed(1)}km';
+    return '1000km+';
   }
 }
 

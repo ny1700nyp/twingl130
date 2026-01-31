@@ -2,15 +2,18 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../utils/time_utils.dart';
 import 'chat_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final int? resetToken;
+  final bool showBackButton;
 
-  const DashboardScreen({super.key, this.resetToken});
+  const DashboardScreen({super.key, this.resetToken, this.showBackButton = true});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -20,6 +23,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int? _lastResetToken;
   final Map<String, ImageProvider> _avatarProviderCache = {};
 
+  RealtimeChannel? _conversationsTrainerChannel;
+  RealtimeChannel? _conversationsTraineeChannel;
+  final Map<String, RealtimeChannel> _messageChannelsByConversationId = {};
+  VoidCallback? _chatCacheListener;
+
   @override
   void initState() {
     super.initState();
@@ -27,7 +35,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       SupabaseService.getChatConversationsCached(user.id);
+      _subscribeToConversationsRealtime(user.id);
     }
+
+    // When the dashboard list changes, keep per-conversation message subscriptions in sync.
+    _chatCacheListener = () {
+      final me = Supabase.instance.client.auth.currentUser;
+      if (me == null) return;
+      final list = SupabaseService.chatConversationsCache.value;
+      if (list == null) return;
+      _syncMessageRealtimeSubscriptions(me.id, list);
+    };
+    SupabaseService.chatConversationsCache.addListener(_chatCacheListener!);
+  }
+
+  @override
+  void dispose() {
+    if (_chatCacheListener != null) {
+      SupabaseService.chatConversationsCache.removeListener(_chatCacheListener!);
+    }
+    _conversationsTrainerChannel?.unsubscribe();
+    _conversationsTraineeChannel?.unsubscribe();
+    for (final ch in _messageChannelsByConversationId.values) {
+      ch.unsubscribe();
+    }
+    _messageChannelsByConversationId.clear();
+    super.dispose();
   }
 
   @override
@@ -39,6 +72,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (user != null) {
         SupabaseService.getChatConversationsCached(user.id, forceRefresh: true);
       }
+    }
+  }
+
+  void _subscribeToConversationsRealtime(String userId) {
+    final client = Supabase.instance.client;
+
+    // New/updated conversations where I'm the trainer.
+    _conversationsTrainerChannel?.unsubscribe();
+    _conversationsTrainerChannel = client.channel('dash:conversations:trainer:$userId');
+    _conversationsTrainerChannel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'conversations',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'trainer_id',
+            value: userId,
+          ),
+          callback: (_) => SupabaseService.refreshChatConversationsIfChanged(userId),
+        )
+        .subscribe();
+
+    // New/updated conversations where I'm the trainee.
+    _conversationsTraineeChannel?.unsubscribe();
+    _conversationsTraineeChannel = client.channel('dash:conversations:trainee:$userId');
+    _conversationsTraineeChannel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'conversations',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'trainee_id',
+            value: userId,
+          ),
+          callback: (_) => SupabaseService.refreshChatConversationsIfChanged(userId),
+        )
+        .subscribe();
+  }
+
+  void _syncMessageRealtimeSubscriptions(String userId, List<Map<String, dynamic>> conversations) {
+    final wanted = <String>{};
+    for (final c in conversations) {
+      final id = c['id']?.toString();
+      if (id != null && id.isNotEmpty) wanted.add(id);
+    }
+
+    // Remove stale.
+    final existingIds = _messageChannelsByConversationId.keys.toList(growable: false);
+    for (final id in existingIds) {
+      if (!wanted.contains(id)) {
+        _messageChannelsByConversationId[id]?.unsubscribe();
+        _messageChannelsByConversationId.remove(id);
+      }
+    }
+
+    // Add new.
+    final client = Supabase.instance.client;
+    for (final conversationId in wanted) {
+      if (_messageChannelsByConversationId.containsKey(conversationId)) continue;
+      final ch = client.channel('dash:messages:$conversationId');
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'messages',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'conversation_id',
+          value: conversationId,
+        ),
+        callback: (payload) {
+          // Keep per-conversation cache warm for instant open, and refresh dashboard metadata (latest/unread).
+          final row = payload.newRecord;
+          if (row.isNotEmpty) {
+            SupabaseService.upsertChatMessageIntoCache(
+              userId: userId,
+              conversationId: conversationId,
+              message: Map<String, dynamic>.from(row),
+            );
+          }
+          SupabaseService.refreshChatConversationsIfChanged(userId);
+        },
+      ).subscribe();
+      _messageChannelsByConversationId[conversationId] = ch;
     }
   }
 
@@ -64,19 +182,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return provider;
   }
 
+  String _normalizedStatus(Map<String, dynamic> c) {
+    return (c['status']?.toString() ?? '').trim().toLowerCase();
+  }
+
+  DateTime? _latestMessageAtLocal(Map<String, dynamic> c) {
+    final latest = c['latest_message'];
+    if (latest is Map) {
+      return TimeUtils.tryParseIsoToLocal((latest['created_at'] as String?) ?? '');
+    }
+    // fallback to conversation updated_at
+    return TimeUtils.tryParseIsoToLocal((c['updated_at'] as String?) ?? '');
+  }
+
+  String _formatRightCornerTime(Map<String, dynamic> c) {
+    final dt = _latestMessageAtLocal(c);
+    if (dt == null) return '';
+    final now = TimeUtils.nowLocal();
+    final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    if (sameDay) return 'Today';
+    return DateFormat('yyyy-MM-dd HH:mm').format(dt);
+  }
+
+  String _stripDeclinedPrefix(String s) {
+    final text = s.trim();
+    // Handle common variants/misspellings: "Declined:" / "declined :" / "Declided:"
+    final m = RegExp(r'^(declined|declided)\s*:?\s*', caseSensitive: false).firstMatch(text);
+    if (m == null) return text;
+    return text.substring(m.end).trim();
+  }
+
+  Widget _roleIconBadge({required bool isTutor}) {
+    const tutorGold = Color(0xFFF59E0B);
+    const studentBlue = Color(0xFF4285F4); // Google blue
+    final bg = isTutor ? tutorGold : studentBlue;
+    final label = isTutor ? 'T' : 'S';
+
+    return Positioned(
+      right: -1,
+      top: -1,
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 11,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String status) {
+    final s = status.trim().toLowerCase();
+    if (s == 'accepted' || s.isEmpty) return const SizedBox.shrink();
+
+    late final Color bg;
+    late final Color fg;
+    late final String label;
+
+    if (s == 'declined') {
+      bg = Colors.red.withAlpha(28);
+      fg = Colors.red.shade700;
+      label = 'Declined';
+    } else if (s == 'pending') {
+      bg = Colors.orange.withAlpha(30);
+      fg = Colors.orange.shade800;
+      label = 'Pending';
+    } else {
+      bg = Colors.grey.withAlpha(28);
+      fg = Colors.grey.shade700;
+      label = s;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withAlpha(80)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
   String _previewText(Map<String, dynamic>? latest) {
     if (latest == null) return '';
     final type = (latest['type'] as String?) ?? 'text';
-    final text = (latest['message_text'] as String?) ?? '';
+    final text = (latest['content'] as String?) ?? (latest['message_text'] as String?) ?? '';
     if (type == 'request') return 'Request';
-    if (type == 'system') return text;
+    if (type == 'system') {
+      // If it's a decline reason, remove "Declined:" prefix in preview.
+      final metadata = latest['metadata'];
+      String? kind;
+      try {
+        if (metadata is Map) {
+          kind = (metadata['kind'] as String?)?.toString();
+        } else if (metadata is String && metadata.isNotEmpty) {
+          final decoded = jsonDecode(metadata);
+          if (decoded is Map) kind = (decoded['kind'] as String?)?.toString();
+        }
+      } catch (_) {}
+      if (kind == 'decline_reason') return _stripDeclinedPrefix(text);
+      if (RegExp(r'^(declined|declided)\s*:?', caseSensitive: false).hasMatch(text.trim())) {
+        return _stripDeclinedPrefix(text);
+      }
+      return text;
+    }
     return text;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat')),
+      appBar: AppBar(
+        automaticallyImplyLeading: widget.showBackButton,
+        title: const Text('Chat'),
+      ),
       body: ValueListenableBuilder<List<Map<String, dynamic>>?>(
         valueListenable: SupabaseService.chatConversationsCache,
         builder: (context, value, _) {
@@ -103,9 +341,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           return RefreshIndicator(
             onRefresh: () => SupabaseService.getChatConversationsCached(user.id, forceRefresh: true),
-            child: ListView.separated(
+            child: ListView.builder(
               itemCount: list.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, i) {
                 final c = list[i];
                 final conversationId = c['id']?.toString() ?? '';
@@ -118,20 +355,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 final unreadCount = (c['unread_count'] as num?)?.toInt() ?? 0;
                 final latest = c['latest_message'] as Map<String, dynamic>?;
+                final status = _normalizedStatus(c);
+                final isDeclined = status == 'declined';
+                final rightTime = _formatRightCornerTime(c);
+                final isRequester = (c['is_requester'] as bool?) ?? false;
+                // If I requested, the other user is the tutor (trainer). Otherwise, the other user is the student (trainee).
+                final isOtherTutor = isRequester;
                 final otherUserId = (c['other_user_id'] as String?) ??
                     (otherProfile?['user_id'] as String?) ??
                     '';
 
                 return ListTile(
                   key: ValueKey(conversationId),
-                  leading: CircleAvatar(
-                    backgroundImage: avatar,
-                    child: avatar == null ? const Icon(Icons.person) : null,
+                  tileColor: isDeclined ? Colors.red.withAlpha(18) : null,
+                  leading: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: avatar,
+                        child: avatar == null ? const Icon(Icons.person) : null,
+                      ),
+                      _roleIconBadge(isTutor: isOtherTutor),
+                    ],
                   ),
                   title: Row(
                     children: [
-                      Expanded(child: Text(otherName)),
-                      if (unreadCount > 0)
+                      Expanded(
+                        child: Text(
+                          otherName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (unreadCount > 0) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -140,15 +395,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           child: Text(
                             unreadCount.toString(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                      ],
+                      _statusChip(status),
                     ],
                   ),
-                  subtitle: Text(
-                    _previewText(latest),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  subtitle: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _previewText(latest),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isDeclined ? Colors.red.shade700 : null,
+                            fontWeight: isDeclined ? FontWeight.w600 : null,
+                          ),
+                        ),
+                      ),
+                      if (rightTime.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          rightTime,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withAlpha(140),
+                                fontSize: 11,
+                              ),
+                        ),
+                      ],
+                    ],
                   ),
                   onTap: otherUserId.isEmpty
                       ? null

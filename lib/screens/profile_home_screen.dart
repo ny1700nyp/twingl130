@@ -248,7 +248,12 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                           final userId = profile['user_id'] as String?;
                           if (userId == null) return;
                           Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => PublicProfileScreen(userId: userId)),
+                            MaterialPageRoute(
+                              builder: (_) => PublicProfileScreen(
+                                userId: userId,
+                                currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -296,7 +301,12 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                       onTap: userId.isEmpty
                           ? null
                           : () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => PublicProfileScreen(userId: userId)),
+                                MaterialPageRoute(
+                                  builder: (_) => PublicProfileScreen(
+                                    userId: userId,
+                                    currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                  ),
+                                ),
                               ),
                     );
                   },

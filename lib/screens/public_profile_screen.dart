@@ -4,10 +4,12 @@ import 'profile_detail_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final String userId;
+  final Map<String, dynamic>? currentUserProfile;
 
   const PublicProfileScreen({
     super.key,
     required this.userId,
+    this.currentUserProfile,
   });
 
   @override
@@ -16,13 +18,29 @@ class PublicProfileScreen extends StatefulWidget {
 
 class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, dynamic>? _profile;
+  Map<String, dynamic>? _currentUserProfile;
   bool _isLoading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _currentUserProfile = widget.currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
     _loadProfile();
+    _loadCurrentUserProfileIfNeeded();
+  }
+
+  Future<void> _loadCurrentUserProfileIfNeeded() async {
+    if (_currentUserProfile != null) return;
+    final user = SupabaseService.supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      final prof = await SupabaseService.getCurrentUserProfileCached(user.id);
+      if (!mounted) return;
+      setState(() => _currentUserProfile = prof);
+    } catch (_) {
+      // ignore (profile will just render without highlights)
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -48,7 +66,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Profile'),
+          title: const SizedBox.shrink(),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
@@ -59,7 +77,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     if (_error != null || _profile == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Profile'),
+          title: const SizedBox.shrink(),
         ),
         body: Center(
           child: Column(
@@ -93,7 +111,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     return ProfileDetailScreen(
       profile: _profile!,
       hideAppBar: false,
-      currentUserProfile: null, // 공개 프로필이므로 현재 사용자 정보 없음
+      // If signed-in, provide current user profile so matching chips can highlight.
+      currentUserProfile: _currentUserProfile,
     );
   }
 }
