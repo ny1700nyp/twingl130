@@ -14,12 +14,14 @@ class ProfileDetailScreen extends StatelessWidget {
   final Map<String, dynamic> profile;
   final bool hideAppBar;
   final Map<String, dynamic>? currentUserProfile;
+  final bool hideActionButtons;
 
   const ProfileDetailScreen({
     super.key,
     required this.profile,
     this.hideAppBar = false,
     this.currentUserProfile,
+    this.hideActionButtons = false,
   });
 
   String _getPronouns(String? gender) {
@@ -80,11 +82,11 @@ class ProfileDetailScreen extends StatelessWidget {
       ),
       backgroundColor: highlighted
           ? Theme.of(context).colorScheme.primary
-          : Theme.of(context).colorScheme.surfaceVariant,
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       side: BorderSide(
         color: highlighted
             ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.surfaceVariant,
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
     );
   }
@@ -109,7 +111,7 @@ class ProfileDetailScreen extends StatelessWidget {
     if (imagePath == null || imagePath.isEmpty) {
       return Container(
         height: 300,
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Icon(
           Icons.person,
           size: 100,
@@ -128,7 +130,7 @@ class ProfileDetailScreen extends StatelessWidget {
         errorBuilder: (ctx, error, stackTrace) {
           return Container(
             height: 300,
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.person,
               size: 100,
@@ -149,7 +151,7 @@ class ProfileDetailScreen extends StatelessWidget {
         errorBuilder: (ctx, error, stackTrace) {
           return Container(
             height: 300,
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.person,
               size: 100,
@@ -188,7 +190,7 @@ class ProfileDetailScreen extends StatelessWidget {
     // 기본값
     return Container(
       height: 300,
-      color: Theme.of(context).colorScheme.surfaceVariant,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Icon(
         Icons.person,
         size: 100,
@@ -202,7 +204,7 @@ class ProfileDetailScreen extends StatelessWidget {
       return Container(
         width: 150,
         height: 200,
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Icon(
           Icons.image,
           size: 50,
@@ -222,7 +224,7 @@ class ProfileDetailScreen extends StatelessWidget {
           return Container(
             width: 150,
             height: 200,
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.image,
               size: 50,
@@ -244,7 +246,7 @@ class ProfileDetailScreen extends StatelessWidget {
           return Container(
             width: 150,
             height: 200,
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.image,
               size: 50,
@@ -267,7 +269,7 @@ class ProfileDetailScreen extends StatelessWidget {
           return Container(
             width: 150,
             height: 200,
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.image,
               size: 50,
@@ -290,7 +292,7 @@ class ProfileDetailScreen extends StatelessWidget {
     return Container(
       width: 150,
       height: 200,
-      color: Theme.of(context).colorScheme.surfaceVariant,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Icon(
         Icons.image,
         size: 50,
@@ -359,7 +361,7 @@ class ProfileDetailScreen extends StatelessWidget {
     if (photos.isEmpty) {
       return Container(
         height: 300,
-        color: Theme.of(context).colorScheme.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Stack(
           children: [
             Center(
@@ -644,7 +646,7 @@ class ProfileDetailScreen extends StatelessWidget {
             _buildPhotoSlider(context, photos),
 
             // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!isMyProfile && userType == 'trainer' && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                 child: SizedBox(
@@ -659,7 +661,7 @@ class ProfileDetailScreen extends StatelessWidget {
               ),
             
             // Chat history 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!isMyProfile && userType == 'trainer' && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 0.0),
                 child: SizedBox(
@@ -691,9 +693,10 @@ class ProfileDetailScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Trainer이고 My Profile이 아닌 경우 이름, 거리, 나이대는 AppBar에 표시되므로 여기서는 제거
-                  // My Profile이거나 Trainee인 경우에만 표시
-                  if (isMyProfile || userType != 'trainer') ...[
+                  // Trainer이고 My Profile이 아닌 경우:
+                  // - 일반 화면에서는 AppBar에 표시하므로 여기서는 제거
+                  // - 하지만 hideAppBar=true(예: 팝업)에서는 AppBar가 없으니 여기서 표시해야 함
+                  if (isMyProfile || userType != 'trainer' || hideAppBar) ...[
                     // 이름, 대명사, 나이, 거리
                     Row(
                       children: [

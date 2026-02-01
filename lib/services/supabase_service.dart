@@ -1003,6 +1003,39 @@ class SupabaseService {
     }
   }
 
+  /// calendar_events: 이벤트 수정
+  static Future<Map<String, dynamic>?> updateCalendarEvent({
+    required String eventId,
+    String? title,
+    String? description,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    final update = <String, dynamic>{
+      'updated_at': TimeUtils.nowUtcIso(),
+    };
+    if (title != null) update['title'] = title;
+    if (description != null) update['description'] = description;
+    if (startTime != null) update['start_time'] = TimeUtils.toUtcIso(startTime);
+    if (endTime != null) update['end_time'] = TimeUtils.toUtcIso(endTime);
+
+    final res = await supabase
+        .from('calendar_events')
+        .update(update)
+        .eq('id', eventId)
+        .select()
+        .maybeSingle();
+    if (res == null) return null;
+    return Map<String, dynamic>.from(res);
+  }
+
+  /// calendar_events: 이벤트 삭제
+  static Future<void> deleteCalendarEvent({
+    required String eventId,
+  }) async {
+    await supabase.from('calendar_events').delete().eq('id', eventId);
+  }
+
   /// GlobalTalentMatchingScreen 지원: 키워드 기반 global cards (거리 없이)
   static Future<List<Map<String, dynamic>>> getTalentMatchingCards({
     required String userType,

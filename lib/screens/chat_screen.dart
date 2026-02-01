@@ -4,12 +4,14 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
 import '../utils/calendar_date_parser.dart';
 import '../utils/time_utils.dart';
+import 'profile_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -976,6 +978,144 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _openOtherProfilePopup() async {
+    final otherUserId = widget.otherUserId.trim();
+    if (otherUserId.isEmpty) return;
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final h = MediaQuery.of(ctx).size.height;
+        final surface = Theme.of(ctx).colorScheme.surface;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Material(
+              color: surface,
+              elevation: 10,
+              borderRadius: BorderRadius.circular(18),
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                height: h * 0.92,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.onSurface.withAlpha(80),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: FutureBuilder<Map<String, dynamic>?>(
+                        future: SupabaseService.getPublicProfile(otherUserId),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (snap.hasError) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Text('Failed to load profile: ${snap.error}'),
+                              ),
+                            );
+                          }
+                          final profile = snap.data;
+                          if (profile == null) {
+                            return const Center(child: Text('Profile not found'));
+                          }
+
+                          final p = Map<String, dynamic>.from(profile);
+                          final meters = _distanceMetersToOther(p);
+                          if (meters != null) {
+                            // Enables privacy-friendly distance rendering already used across the app.
+                            p['distance_meters'] = meters;
+                          }
+
+                          // Show full details inside the card, but hide action buttons for this popup.
+                          return ProfileDetailScreen(
+                            profile: p,
+                            hideAppBar: true,
+                            hideActionButtons: true,
+                            currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  ({double lat, double lon})? _myLocation() {
+    final cached = SupabaseService.lastKnownLocation.value;
+    if (cached != null) return cached;
+
+    final me = SupabaseService.currentUserProfileCache.value;
+    final lat = me?['latitude'];
+    final lon = me?['longitude'];
+    if (lat is num && lon is num) {
+      return (lat: lat.toDouble(), lon: lon.toDouble());
+    }
+    return null;
+  }
+
+  double? _distanceMetersToOther(Map<String, dynamic> otherProfile) {
+    final my = _myLocation();
+    if (my == null) return null;
+    final lat = otherProfile['latitude'];
+    final lon = otherProfile['longitude'];
+    if (lat is! num || lon is! num) return null;
+    return Geolocator.distanceBetween(my.lat, my.lon, lat.toDouble(), lon.toDouble());
+  }
+
+  Widget _otherNameButton(String otherName) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: _openOtherProfilePopup,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  otherName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.visibility_outlined,
+                size: 14,
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(140),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final otherName = (widget.otherProfile?['name'] as String?) ?? 'Chat';
@@ -986,14 +1126,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final scheduledStart = _conversationScheduledStartLocal();
     final scheduledEnd = _conversationScheduledEndLocal();
-    final showScheduledLabel = scheduledStart != null &&
-        scheduledEnd != null &&
-        (_conversation?['schedule_state'] as String?) == 'agreed';
-    final scheduledLabel = showScheduledLabel ? _formatScheduledLabel(scheduledStart!, scheduledEnd!) : null;
+    final showScheduledLabel =
+        scheduledStart != null && scheduledEnd != null && (_conversation?['schedule_state'] as String?) == 'agreed';
+    final scheduledLabel = showScheduledLabel ? _formatScheduledLabel(scheduledStart, scheduledEnd) : null;
 
     final title = Row(
       children: [
-        Expanded(child: Text(otherName, overflow: TextOverflow.ellipsis)),
+        Expanded(child: _otherNameButton(otherName)),
         if (showPending || showDeclined)
           Padding(
             padding: const EdgeInsets.only(left: 10),
