@@ -3,12 +3,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
-import '../theme/app_theme.dart';
+import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
 import 'general_settings_screen.dart';
@@ -145,26 +144,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _refreshCityFromGps() async {
-    if (_isResolvingCity) return;
-    setState(() => _isResolvingCity = true);
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-
-      final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 10),
-      );
-      await SupabaseService.setLastKnownLocationForCurrentUser(lat: pos.latitude, lon: pos.longitude);
-      await _refreshCityFromLatLon(pos.latitude, pos.longitude);
-    } catch (_) {
-      // ignore
-    } finally {
-      if (mounted) setState(() => _isResolvingCity = false);
-    }
-  }
-
   Future<void> _openNearbyTalent() async {
     if (!mounted) return;
     await Navigator.of(context).push(
@@ -192,6 +171,19 @@ class _HomeScreenState extends State<HomeScreen> {
       // No forced DB refresh here; Edit screen updates cache optimistically.
     } else if (value == 'general_settings') {
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()));
+    } else if (value == 'logout') {
+      final nav = Navigator.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (e) {
+        // Still try to clear caches and return to login.
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+      SupabaseService.clearInMemoryCaches();
+      if (!mounted) return;
+      nav.pushReplacementNamed('/login');
     }
   }
 
@@ -201,28 +193,27 @@ class _HomeScreenState extends State<HomeScreen> {
       valueListenable: SupabaseService.currentCityCache,
       builder: (context, cityValue, _) {
         final city = (cityValue ?? '').trim();
-        final cityLabel = city.isNotEmpty ? city : (_isResolvingCity ? 'Locating' : 'Enable location');
+        final showLocation = city.isNotEmpty || _isResolvingCity;
+        final cityLabel = city.isNotEmpty ? city : 'Locating';
 
+        if (!showLocation) {
+          // If city is not available, do not show "Enable location" at all.
+          return const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800);
+        }
+
+        // City label is display-only (do not allow tapping).
         return Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'Twingl',
-              style: TextStyle(
-                color: AppTheme.primaryGreen,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800),
             const SizedBox(width: 10),
-            InkWell(
-              onTap: _isResolvingCity ? null : _refreshCityFromGps,
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, size: 18),
-                  const SizedBox(width: 4),
-                  Text(cityLabel, style: const TextStyle(fontSize: 13)),
-                ],
-              ),
+            Row(
+              children: [
+                const Icon(Icons.location_on, size: 18),
+                const SizedBox(width: 4),
+                Text(cityLabel, style: const TextStyle(fontSize: 13)),
+              ],
             ),
           ],
         );
@@ -232,29 +223,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        centerTitle: true,
         title: title,
-        actions: [
-          IconButton(
-            tooltip: 'Find nearby talent',
-            onPressed: _openNearbyTalent,
-            icon: const Icon(Icons.search),
-          ),
-          IconButton(
-            tooltip: 'Talent match (any distance)',
-            onPressed: _openTalentMatch,
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onSelected: _onSelectSettings,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'my_profile', child: Text('My Profile')),
-              PopupMenuItem(value: 'edit_trainers', child: Text('Edit my Favorite')),
-              PopupMenuItem(value: 'general_settings', child: Text('General Settings')),
-            ],
-          ),
-        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -286,6 +256,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     title: Text(name?.isNotEmpty == true ? name! : 'My Profile'),
                     onTap: () => _onSelectSettings('my_profile'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Find nearby talent',
+                          onPressed: _openNearbyTalent,
+                          icon: const Icon(Icons.search),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          tooltip: 'Talent match (any distance)',
+                          onPressed: _openTalentMatch,
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Settings',
+                          icon: const Icon(Icons.settings_outlined),
+                          onSelected: _onSelectSettings,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'my_profile', child: Text('My Profile')),
+                            PopupMenuItem(value: 'edit_trainers', child: Text('Edit my Favorite')),
+                            PopupMenuItem(value: 'general_settings', child: Text('General Settings')),
+                            PopupMenuItem(value: 'logout', child: Text('Log out')),
+                          ],
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

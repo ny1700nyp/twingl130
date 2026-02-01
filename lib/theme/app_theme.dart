@@ -7,6 +7,9 @@ class AppTheme {
   static const Color secondaryGold = Color(0xFFF59E0B); // Amber-500 (Gold)
   static const Color tertiaryGreen = Color(0xFF10B981); // Emerald-500
   static const Color successGreen = Color(0xFF10B981); // Emerald-500
+
+  // Wordmark color (Google Green)
+  static const Color twinglGreen = Color(0xFF34A853);
   
   // Helper method to get theme colors
   static Color getPendingColor() => secondaryGold;
@@ -30,13 +33,11 @@ class AppTheme {
       secondary: secondaryGold,
       tertiary: tertiaryGreen,
       surface: surfaceLight,
-      background: backgroundLight,
       error: Colors.red,
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onTertiary: Colors.black87,
       onSurface: Colors.black87,
-      onBackground: Colors.black87,
       onError: Colors.white,
     );
 
@@ -240,13 +241,11 @@ class AppTheme {
       secondary: secondaryGold,
       tertiary: tertiaryGreen,
       surface: surfaceDark,
-      background: backgroundDark,
       error: Colors.red.shade400,
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onTertiary: Colors.white,
       onSurface: Colors.white,
-      onBackground: Colors.white,
       onError: Colors.white,
     );
 

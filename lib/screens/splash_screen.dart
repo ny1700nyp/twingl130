@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../widgets/twingl_wordmark.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -17,15 +18,7 @@ class SplashScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Twingl 텍스트
-            Text(
-              'Twingl',
-              style: GoogleFonts.quicksand(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryGreen,
-                letterSpacing: 1.2,
-              ),
-            ),
+            const TwinglWordmark(fontSize: 48, fontWeight: FontWeight.bold),
             const SizedBox(height: 16),
             // "Find the Master Next Door." 텍스트
             Text(

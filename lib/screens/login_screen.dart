@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../widgets/twingl_wordmark.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -136,16 +138,9 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: InkWell(
                   onTap: _isLoading ? null : _signInAnonymouslyAndGoOnboarding,
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                    child: Text(
-                      'Twingl',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                    child: const TwinglWordmark(fontSize: 32, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

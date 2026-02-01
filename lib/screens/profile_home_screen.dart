@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
 import 'my_profile_screen.dart';
@@ -181,7 +182,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Twingl'),
+            const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800),
             const SizedBox(width: 10),
             InkWell(
               onTap: _isResolvingCity ? null : _refreshCityFromGps,
