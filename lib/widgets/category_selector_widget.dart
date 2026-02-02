@@ -251,12 +251,24 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
             spacing: 8,
             runSpacing: 8,
             children: widget.selectedItems.map((item) {
+              final scheme = Theme.of(context).colorScheme;
               return Chip(
-                label: Text(item),
+                backgroundColor: scheme.surfaceContainerHighest,
+                label: Text(
+                  item,
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 onDeleted: () => _toggleItem(item),
-                deleteIcon: const Icon(Icons.close, size: 18),
+                deleteIcon: Icon(
+                  Icons.close,
+                  size: 18,
+                  color: scheme.onSurfaceVariant.withOpacity(0.85),
+                ),
                 side: BorderSide(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: scheme.outlineVariant,
                 ),
               );
             }).toList(),
@@ -367,13 +379,16 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
             runSpacing: 8,
             children: subItem.items.map((item) {
               final isSelected = widget.selectedItems.contains(item);
+              final scheme = Theme.of(context).colorScheme;
 
               return FilterChip(
                 label: Text(
                   item,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isSelected ? Colors.white : null,
+                    // Always set explicit label color so it stays readable in light/dark mode.
+                    color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                   ),
                 ),
                 selected: isSelected,
@@ -382,13 +397,14 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                     _toggleItem(item);
                   });
                 },
-                selectedColor: Theme.of(context).colorScheme.primary,
-                checkmarkColor: Colors.white,
+                backgroundColor: scheme.surfaceContainerHighest,
+                selectedColor: scheme.primary,
+                checkmarkColor: scheme.onPrimary,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 side: BorderSide(
                   color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      ? scheme.primary
+                      : scheme.outlineVariant,
                 ),
               );
             }).toList(),

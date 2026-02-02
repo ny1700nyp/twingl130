@@ -13,6 +13,8 @@ import '../services/supabase_service.dart';
 import '../utils/time_utils.dart';
 import '../widgets/category_selector_widget.dart';
 
+enum _OnboardingStepKey { basic, topics, lessonInfo, photos, waivers }
+
 class OnboardingScreen extends StatefulWidget {
   final String? initialUserType;
   final Map<String, dynamic>? existingProfile;
@@ -32,7 +34,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isSaving = false;
 
   // Immutable (after initial onboarding)
-  String _userType = 'trainer'; // trainer=tutor, trainee=student
+  String _userType = 'trainee'; // trainer=tutor, trainee=student (dummy: student only)
   String _gender = 'Prefer not to say';
   DateTime? _birthdateLocal;
   final _nameController = TextEditingController();
@@ -64,6 +66,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _dummyLocationOffsetApplied = false;
   bool _dummyDataPrefilled = false;
   final math.Random _dummyRng = math.Random();
+  /// Fallback GPS when device location fails (dummy profiles must have coordinates).
+  static const double _dummyFallbackLat = 37.5665;
+  static const double _dummyFallbackLon = 126.9780;
 
   bool get _isEdit => widget.existingProfile != null;
   bool get _isDummy => !_isEdit && _isAnonymousSession();
@@ -181,12 +186,22 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       if (lon is num) _longitude = lon.toDouble();
     }
 
+    // Student profiles should not have "Lesson info". Clear any legacy fields loaded from older versions.
+    if (_userType == 'trainee') {
+      _lessonLocations.clear();
+      _aboutLessonController.text = '';
+      _rateController.text = '';
+      _parentParticipationWelcomed = false;
+    }
+
     _maybeLoadCurrentLocation();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_isDummy) {
-        // Dummy profiles are always tutors.
-        setState(() => _userType = 'trainer');
+        // Ensure dummy has GPS (try device first, then fallback).
+        await _ensureDummyHasLocation();
+        if (!mounted) return;
+        // Dummy profiles: student only (initial and on regenerate).
         _prefillDummyOnboardingData(regenerate: false);
       }
     });
@@ -239,7 +254,20 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         lon: adjusted.longitude,
       );
     } catch (_) {
-      // optional
+      // optional; for dummy we set fallback in _ensureDummyHasLocation / _prefillDummyOnboardingData
+    }
+  }
+
+  /// For dummy flow only: ensure _latitude/_longitude are set (device GPS or fallback).
+  Future<void> _ensureDummyHasLocation() async {
+    if (!_isDummy) return;
+    await _maybeLoadCurrentLocation();
+    if (!mounted) return;
+    if (_latitude == null || _longitude == null) {
+      setState(() {
+        _latitude = _dummyFallbackLat;
+        _longitude = _dummyFallbackLon;
+      });
     }
   }
 
@@ -317,6 +345,9 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     if (_dummyDataPrefilled && !regenerate) return;
     _dummyDataPrefilled = true;
 
+    // Dummy flow: always student. Otherwise use current role or force student on regenerate.
+    final pickedUserType = _isDummy ? 'trainee' : (regenerate ? 'trainee' : _userType);
+
     const firstNames = <String>[
       'John','Michael','David','James','Robert','William','Christopher','Daniel','Matthew','Joshua',
       'Andrew','Joseph','Anthony','Ryan','Nicholas','Samuel','Benjamin','Jonathan','Brandon','Kevin',
@@ -327,7 +358,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     ];
     final first = firstNames[_dummyRng.nextInt(firstNames.length)];
     final last = lastNames[_dummyRng.nextInt(lastNames.length)];
-    final name = '$first $last';
+    final baseName = '$first $last';
+    final name = pickedUserType == 'trainee' ? '$baseName ST' : baseName;
 
     const genders = ['man', 'woman', 'non-binary', 'Prefer not to say'];
     final gender = genders[_dummyRng.nextInt(genders.length)];
@@ -356,19 +388,42 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
     if (!mounted) return;
     setState(() {
-      _userType = 'trainer';
+      // Dummy profiles must have GPS; use fallback if still missing (e.g. permission denied).
+      if (_isDummy && (_latitude == null || _longitude == null)) {
+        _latitude = _dummyFallbackLat;
+        _longitude = _dummyFallbackLon;
+      }
+      _userType = pickedUserType;
       _nameController.text = name;
       _gender = gender;
       _birthdateLocal = birth;
       _talentsOrGoals = picked;
-      _lessonLocations
-        ..clear()
-        ..add('online')
-        ..add(_dummyRng.nextBool() ? 'onsite' : 'online');
       _aboutMeController.text = about;
-      _aboutLessonController.text = aboutLesson;
-      _rateController.text = (20 + _dummyRng.nextInt(81)).toString(); // 20..100
-      _parentParticipationWelcomed = _dummyRng.nextBool();
+      if (_userType == 'trainer') {
+        _lessonLocations
+          ..clear()
+          ..add('online')
+          ..add(_dummyRng.nextBool() ? 'onsite' : 'online');
+        _aboutLessonController.text = aboutLesson;
+      } else {
+        _lessonLocations.clear();
+        _aboutLessonController.text = '';
+      }
+      if (_userType == 'trainer') {
+        _rateController.text = (20 + _dummyRng.nextInt(81)).toString(); // 20..100
+        _parentParticipationWelcomed = _dummyRng.nextBool();
+      } else {
+        _rateController.text = '';
+        _parentParticipationWelcomed = false;
+      }
+
+      // If the role changes, waiver requirements change too. Keep agreement state clean.
+      _agreeRoleWaiver = false;
+      _agreeParentalConsent = false;
+
+      // Role change can change step count; keep current index valid.
+      final last = _stepKeys(userTypeOverride: _userType).length - 1;
+      _step = _step.clamp(0, last);
       // Photos intentionally NOT filled; user attaches manually.
     });
   }
@@ -461,31 +516,41 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  bool _validateStep(int step) {
-    if (step == 0) {
-      if ((_nameController.text.trim()).isEmpty) {
-        _snack('Name is required.');
-        return false;
-      }
-      if (_birthdateLocal == null) {
-        _snack('Birthdate is required.');
-        return false;
-      }
-      return true;
-    }
-    if (step == 1) {
-      if (_talentsOrGoals.isEmpty) {
-        _snack('Please select at least 1 topic.');
-        return false;
-      }
-      return true;
-    }
-    if (step == 2) {
-      if (_lessonLocations.isEmpty) {
-        _snack('Please select at least one lesson location (Online/Onsite).');
-        return false;
-      }
-      if (_isTutor) {
+  List<_OnboardingStepKey> _stepKeys({String? userTypeOverride}) {
+    final type = (userTypeOverride ?? _userType).trim().toLowerCase();
+    final isTutor = type == 'trainer';
+    return <_OnboardingStepKey>[
+      _OnboardingStepKey.basic,
+      _OnboardingStepKey.topics,
+      if (isTutor) _OnboardingStepKey.lessonInfo,
+      _OnboardingStepKey.photos,
+      if (!_isEdit) _OnboardingStepKey.waivers,
+    ];
+  }
+
+  bool _validateStepKey(_OnboardingStepKey key) {
+    switch (key) {
+      case _OnboardingStepKey.basic:
+        if ((_nameController.text.trim()).isEmpty) {
+          _snack('Name is required.');
+          return false;
+        }
+        if (_birthdateLocal == null) {
+          _snack('Birthdate is required.');
+          return false;
+        }
+        return true;
+      case _OnboardingStepKey.topics:
+        if (_talentsOrGoals.isEmpty) {
+          _snack('Please select at least 1 topic.');
+          return false;
+        }
+        return true;
+      case _OnboardingStepKey.lessonInfo:
+        if (_lessonLocations.isEmpty) {
+          _snack('Please select at least one lesson location (Online/Onsite).');
+          return false;
+        }
         final rate = _rateController.text.trim();
         if (rate.isEmpty) {
           _snack('Tutoring rate per hour is required.');
@@ -495,37 +560,40 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
           _snack('Tutoring rate must be a number.');
           return false;
         }
-      }
-      return true;
+        return true;
+      case _OnboardingStepKey.photos:
+        if (_profilePhotos.isEmpty) {
+          _snack('Please select 1 profile photo (required).');
+          return false;
+        }
+        return true;
+      case _OnboardingStepKey.waivers:
+        if (_isEdit) return true;
+        if (!_agreeRoleWaiver) {
+          _snack(_isTutor ? 'Please agree to the Tutor waiver.' : 'Please agree to the Student waiver.');
+          return false;
+        }
+        if (_requiresParentalConsent && !_agreeParentalConsent) {
+          _snack('Parental consent is required for minors.');
+          return false;
+        }
+        return true;
     }
-    if (step == 3) {
-      if (_profilePhotos.isEmpty) {
-        _snack('Please select 1 profile photo (required).');
-        return false;
-      }
-      return true;
-    }
-    if (step == 4 && !_isEdit) {
-      if (!_agreeRoleWaiver) {
-        _snack(_isTutor ? 'Please agree to the Tutor waiver.' : 'Please agree to the Student waiver.');
-        return false;
-      }
-      if (_requiresParentalConsent && !_agreeParentalConsent) {
-        _snack('Parental consent is required for minors.');
-        return false;
-      }
-      return true;
-    }
-    return true;
+  }
+
+  bool _validateStep(int step) {
+    final keys = _stepKeys();
+    if (step < 0 || step >= keys.length) return true;
+    return _validateStepKey(keys[step]);
   }
 
   Future<void> _save() async {
     if (_isSaving) return;
 
     // Validate all required steps.
-    final lastStep = _isEdit ? 3 : 4;
-    for (int i = 0; i <= lastStep; i++) {
-      if (!_validateStep(i)) {
+    final keys = _stepKeys();
+    for (int i = 0; i < keys.length; i++) {
+      if (!_validateStepKey(keys[i])) {
         setState(() => _step = i);
         return;
       }
@@ -541,6 +609,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     try {
       final existing = widget.existingProfile;
       final fixedUserType = (_isEdit ? (existing?['user_type'] as String?) : _userType) ?? _userType;
+      final isTutorProfile = fixedUserType.trim().toLowerCase() == 'trainer';
       final fixedName = _isEdit ? (existing?['name'] as String?) : _nameController.text.trim();
       final fixedGender = _isEdit ? (existing?['gender'] as String?) : _gender;
 
@@ -556,13 +625,15 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         'latitude': _latitude,
         'longitude': _longitude,
         'talents': _talentsOrGoals,
-        'teaching_methods': _lessonLocations.toList(),
+        // Tutor only: lesson info. Students should not keep these fields.
+        'teaching_methods': isTutorProfile ? _lessonLocations.toList() : <String>[],
         'about_me': _aboutMeController.text.trim().isEmpty ? null : _aboutMeController.text.trim(),
         // Reuse existing schema column (per MIGRATE_PROFILES_UNIFY_TALENTS.sql comment).
-        'experience_description':
-            _aboutLessonController.text.trim().isEmpty ? null : _aboutLessonController.text.trim(),
-        'parent_participation_welcomed': _isTutor ? _parentParticipationWelcomed : false,
-        'tutoring_rate': _isTutor ? _rateController.text.trim() : null,
+        'experience_description': isTutorProfile
+            ? (_aboutLessonController.text.trim().isEmpty ? null : _aboutLessonController.text.trim())
+            : null,
+        'parent_participation_welcomed': isTutorProfile ? _parentParticipationWelcomed : false,
+        'tutoring_rate': isTutorProfile ? _rateController.text.trim() : null,
         // Photos
         'main_photo_path': _profilePhotos.isNotEmpty ? _profilePhotos.first : null,
         'profile_photos': _profilePhotos.isNotEmpty ? _profilePhotos : null,
@@ -705,332 +776,373 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
   }
 
   List<Step> _buildSteps() {
-    final steps = <Step>[
-      Step(
-        title: const Text('Role & Basic info'),
-        isActive: _step >= 0,
-        state: _step > 0 ? StepState.complete : StepState.indexed,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_isDummy)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Demo mode: random data is filled (photos skipped).'),
+    final keys = _stepKeys();
+    final steps = <Step>[];
+
+    for (int i = 0; i < keys.length; i++) {
+      final key = keys[i];
+      final isActive = _step >= i;
+      final state = _step > i ? StepState.complete : StepState.indexed;
+
+      switch (key) {
+        case _OnboardingStepKey.basic:
+          final disabledFill = Theme.of(context).colorScheme.surfaceContainerHighest;
+          steps.add(
+            Step(
+              title: const Text('Role & Basic info'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_isDummy)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text('Demo mode: random data is filled (photos skipped).'),
+                          ),
+                          TextButton(
+                            onPressed: _isSaving ? null : () => _prefillDummyOnboardingData(regenerate: true),
+                            child: const Text('Regenerate'),
+                          ),
+                        ],
+                      ),
                     ),
-                    TextButton(
-                      onPressed: _isSaving ? null : () => _prefillDummyOnboardingData(regenerate: true),
-                      child: const Text('Regenerate'),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'trainer', label: Text('Tutor')),
+                      ButtonSegment(value: 'trainee', label: Text('Student')),
+                    ],
+                    selected: {_userType},
+                    onSelectionChanged: (_isDummy || _isEdit)
+                        ? null
+                        : (s) {
+                            final nextType = s.first;
+                            setState(() {
+                              _userType = nextType;
+                              if (_userType == 'trainee') {
+                                // Students don't have Lesson info.
+                                _lessonLocations.clear();
+                                _aboutLessonController.text = '';
+                                _rateController.text = '';
+                                _parentParticipationWelcomed = false;
+                              }
+                              final last = _stepKeys(userTypeOverride: _userType).length - 1;
+                              _step = _step.clamp(0, last);
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _nameController,
+                    enabled: !_isEdit,
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      border: const OutlineInputBorder(),
+                      filled: _isEdit,
+                      fillColor: _isEdit ? disabledFill : null,
                     ),
-                  ],
-                ),
-              ),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'trainer', label: Text('Tutor')),
-                ButtonSegment(value: 'trainee', label: Text('Student')),
-              ],
-              selected: {_userType},
-              onSelectionChanged: (_isDummy || _isEdit) ? null : (s) => setState(() => _userType = s.first),
-            ),
-            const SizedBox(height: 12),
-            if (_isEdit)
-              Text(
-                'Role, name, gender, and birthdate cannot be edited later.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _gender,
+                    decoration: InputDecoration(
+                      labelText: 'Gender',
+                      border: const OutlineInputBorder(),
+                      filled: _isEdit,
+                      fillColor: _isEdit ? disabledFill : null,
                     ),
-              ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              readOnly: _isEdit,
-              decoration: const InputDecoration(
-                labelText: 'Name (cannot be changed later)',
-                border: OutlineInputBorder(),
+                    items: const [
+                      DropdownMenuItem(value: 'man', child: Text('Man')),
+                      DropdownMenuItem(value: 'woman', child: Text('Woman')),
+                      DropdownMenuItem(value: 'non-binary', child: Text('Non-binary')),
+                      DropdownMenuItem(value: 'Prefer not to say', child: Text('Prefer not to say')),
+                    ],
+                    onChanged: _isEdit ? null : (v) => setState(() => _gender = v ?? 'Prefer not to say'),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: (_isSaving || _isEdit) ? null : _pickBirthdate,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Birthdate',
+                        border: const OutlineInputBorder(),
+                        filled: _isEdit,
+                        fillColor: _isEdit ? disabledFill : null,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _birthdateLabel(),
+                              style: TextStyle(
+                                color: _birthdateLocal == null
+                                    ? Theme.of(context).colorScheme.onSurface.withAlpha(150)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.calendar_month),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_birthdateLocal != null)
+                    Text(
+                      'Age: ${_computedAge() ?? ''}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                          ),
+                    ),
+                  const SizedBox(height: 16),
+                  _sectionTitle('About me (optional)'),
+                  TextField(
+                    controller: _aboutMeController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Tell others about you…',
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _gender,
-              decoration: const InputDecoration(
-                labelText: 'Gender (cannot be changed later)',
-                border: OutlineInputBorder(),
+          );
+          break;
+
+        case _OnboardingStepKey.topics:
+          steps.add(
+            Step(
+              title: Text(_isTutor ? 'What can you teach?' : 'What do you want to learn?'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CategorySelectorWidget(
+                    selectedItems: _talentsOrGoals,
+                    onSelectionChanged: (v) => setState(() => _talentsOrGoals = v),
+                    title: _isTutor ? 'What can you teach?' : 'What do you want to learn?',
+                    hint: 'Select 1–6.',
+                  ),
+                ],
               ),
-              items: const [
-                DropdownMenuItem(value: 'man', child: Text('Man')),
-                DropdownMenuItem(value: 'woman', child: Text('Woman')),
-                DropdownMenuItem(value: 'non-binary', child: Text('Non-binary')),
-                DropdownMenuItem(value: 'Prefer not to say', child: Text('Prefer not to say')),
-              ],
-              onChanged: _isEdit ? null : (v) => setState(() => _gender = v ?? 'Prefer not to say'),
             ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: (_isSaving || _isEdit) ? null : _pickBirthdate,
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Birthdate (cannot be changed later)',
-                  border: OutlineInputBorder(),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _birthdateLabel(),
-                        style: TextStyle(
-                          color: _birthdateLocal == null
-                              ? Theme.of(context).colorScheme.onSurface.withAlpha(150)
-                              : null,
+          );
+          break;
+
+        case _OnboardingStepKey.lessonInfo:
+          steps.add(
+            Step(
+              title: const Text('Lesson info'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionTitle('About the lesson (optional)'),
+                  TextField(
+                    controller: _aboutLessonController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Share lesson details, expectations, goals…',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _sectionTitle('Lesson Location (required)'),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilterChip(
+                        label: const Text('Onsite'),
+                        selected: _lessonLocations.contains('onsite'),
+                        onSelected: (v) => setState(() {
+                          v ? _lessonLocations.add('onsite') : _lessonLocations.remove('onsite');
+                        }),
+                      ),
+                      FilterChip(
+                        label: const Text('Online'),
+                        selected: _lessonLocations.contains('online'),
+                        onSelected: (v) => setState(() {
+                          v ? _lessonLocations.add('online') : _lessonLocations.remove('online');
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _sectionTitle('Tutoring Rate per Hour (required)'),
+                  TextField(
+                    controller: _rateController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g. 40',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: _parentParticipationWelcomed,
+                    onChanged: (v) => setState(() => _parentParticipationWelcomed = v ?? false),
+                    title: const Text('Parent participation welcomed (optional)'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ),
+          );
+          break;
+
+        case _OnboardingStepKey.photos:
+          steps.add(
+            Step(
+              title: const Text('Photos'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionTitle('Profile photos'),
+                  _photoGrid(
+                    photos: _profilePhotos,
+                    maxCount: 4,
+                    helperText: '1 required + up to 3 optional. (Can be changed later)',
+                    onAdd: () async {
+                      // If none, pick single as main; otherwise multi-add.
+                      if (_profilePhotos.isEmpty) {
+                        final one = await _pickSinglePhotoAsDataUrl();
+                        if (one == null) return;
+                        if (!mounted) return;
+                        setState(() => _profilePhotos.add(one));
+                      } else {
+                        final remaining = 4 - _profilePhotos.length;
+                        final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
+                        if (!mounted) return;
+                        setState(() => _profilePhotos.addAll(added));
+                      }
+                    },
+                    onRemove: (idx) => setState(() => _profilePhotos.removeAt(idx)),
+                  ),
+                  const SizedBox(height: 16),
+                  _sectionTitle('Certificates / Awards / Degrees (optional)'),
+                  _photoGrid(
+                    photos: _certificatePhotos,
+                    maxCount: 3,
+                    helperText: 'Up to 3 (optional). (Can be changed later)',
+                    onAdd: () async {
+                      final remaining = 3 - _certificatePhotos.length;
+                      final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
+                      if (!mounted) return;
+                      setState(() => _certificatePhotos.addAll(added));
+                    },
+                    onRemove: (idx) => setState(() => _certificatePhotos.removeAt(idx)),
+                  ),
+                ],
+              ),
+            ),
+          );
+          break;
+
+        case _OnboardingStepKey.waivers:
+          steps.add(
+            Step(
+              title: const Text('Waivers'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Required before finishing.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _isTutor ? _tutorWaiverTitle : _studentWaiverTitle,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 220,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        _isTutor ? _tutorWaiverText : _studentWaiverText,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: _agreeRoleWaiver,
+                    onChanged: (v) => setState(() => _agreeRoleWaiver = v ?? false),
+                    title: Text(
+                      _isTutor
+                          ? 'I have read and agree to the Tutor Agreement & Liability Waiver'
+                          : 'I have read and agree to the Student Assumption of Risk & Waiver',
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 10),
+                  if (_requiresParentalConsent) ...[
+                    Text(
+                      _parentalConsentTitle,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 220,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          _parentalConsentText,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
                         ),
                       ),
                     ),
-                    const Icon(Icons.calendar_month),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      value: _agreeParentalConsent,
+                      onChanged: (v) => setState(() => _agreeParentalConsent = v ?? false),
+                      title: const Text('I have read and agree to the Parental Consent & Guardian Release'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ] else ...[
+                    Text(
+                      'Parental consent is only required for minors (under 18).',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                          ),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            if (_birthdateLocal != null)
-              Text(
-                'Age: ${_computedAge() ?? ''}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                    ),
-              ),
-          ],
-        ),
-      ),
-      Step(
-        title: Text(_isTutor ? 'What can you teach?' : 'What do you want to learn?'),
-        isActive: _step >= 1,
-        state: _step > 1 ? StepState.complete : StepState.indexed,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CategorySelectorWidget(
-              selectedItems: _talentsOrGoals,
-              onSelectionChanged: (v) => setState(() => _talentsOrGoals = v),
-              title: _isTutor ? 'What can you teach?' : 'What do you want to learn?',
-              hint: 'Select 1–6.',
-            ),
-          ],
-        ),
-      ),
-      Step(
-        title: const Text('Lesson info'),
-        isActive: _step >= 2,
-        state: _step > 2 ? StepState.complete : StepState.indexed,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionTitle('About me (optional)'),
-            TextField(
-              controller: _aboutMeController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Tell others about you…',
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('About the lesson (optional)'),
-            TextField(
-              controller: _aboutLessonController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Share lesson details, expectations, goals…',
-              ),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('Lesson Location (required)'),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilterChip(
-                  label: const Text('Onsite'),
-                  selected: _lessonLocations.contains('onsite'),
-                  onSelected: (v) => setState(() {
-                    v ? _lessonLocations.add('onsite') : _lessonLocations.remove('onsite');
-                  }),
-                ),
-                FilterChip(
-                  label: const Text('Online'),
-                  selected: _lessonLocations.contains('online'),
-                  onSelected: (v) => setState(() {
-                    v ? _lessonLocations.add('online') : _lessonLocations.remove('online');
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_isTutor) ...[
-              _sectionTitle('Tutoring Rate per Hour (required)'),
-              TextField(
-                controller: _rateController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'e.g. 40',
-                ),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: _parentParticipationWelcomed,
-                onChanged: (v) => setState(() => _parentParticipationWelcomed = v ?? false),
-                title: const Text('Parent participation welcomed (optional)'),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ],
-        ),
-      ),
-      Step(
-        title: const Text('Photos'),
-        isActive: _step >= 3,
-        state: (_isEdit ? (_step > 3 ? StepState.complete : StepState.indexed) : (_step > 3 ? StepState.complete : StepState.indexed)),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionTitle('Profile photos'),
-            _photoGrid(
-              photos: _profilePhotos,
-              maxCount: 4,
-              helperText: '1 required + up to 3 optional. (Can be changed later)',
-              onAdd: () async {
-                // If none, pick single as main; otherwise multi-add.
-                if (_profilePhotos.isEmpty) {
-                  final one = await _pickSinglePhotoAsDataUrl();
-                  if (one == null) return;
-                  if (!mounted) return;
-                  setState(() => _profilePhotos.add(one));
-                } else {
-                  final remaining = 4 - _profilePhotos.length;
-                  final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
-                  if (!mounted) return;
-                  setState(() => _profilePhotos.addAll(added));
-                }
-              },
-              onRemove: (idx) => setState(() => _profilePhotos.removeAt(idx)),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('Certificates / Awards / Degrees (optional)'),
-            _photoGrid(
-              photos: _certificatePhotos,
-              maxCount: 3,
-              helperText: 'Up to 3 (optional). (Can be changed later)',
-              onAdd: () async {
-                final remaining = 3 - _certificatePhotos.length;
-                final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
-                if (!mounted) return;
-                setState(() => _certificatePhotos.addAll(added));
-              },
-              onRemove: (idx) => setState(() => _certificatePhotos.removeAt(idx)),
-            ),
-          ],
-        ),
-      ),
-    ];
-
-    if (!_isEdit) {
-      steps.add(
-        Step(
-          title: const Text('Waivers'),
-          isActive: _step >= 4,
-          state: StepState.indexed,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Required before finishing.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                    ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _isTutor ? _tutorWaiverTitle : _studentWaiverTitle,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                height: 220,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    _isTutor ? _tutorWaiverText : _studentWaiverText,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                value: _agreeRoleWaiver,
-                onChanged: (v) => setState(() => _agreeRoleWaiver = v ?? false),
-                title: Text(
-                  _isTutor
-                      ? 'I have read and agree to the Tutor Agreement & Liability Waiver'
-                      : 'I have read and agree to the Student Assumption of Risk & Waiver',
-                ),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 10),
-              if (_requiresParentalConsent) ...[
-                Text(
-                  _parentalConsentTitle,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  height: 220,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      _parentalConsentText,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  value: _agreeParentalConsent,
-                  onChanged: (v) => setState(() => _agreeParentalConsent = v ?? false),
-                  title: const Text('I have read and agree to the Parental Consent & Guardian Release'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ] else ...[
-                Text(
-                  'Parental consent is only required for minors (under 18).',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                      ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
+          );
+          break;
+      }
     }
 
     return steps;
@@ -1049,7 +1161,11 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       ),
       body: SafeArea(
         child: Stepper(
-          currentStep: _step,
+          // IMPORTANT: Stepper asserts that the number of steps does not change across updates.
+          // Our onboarding flow changes step count depending on Tutor/Student (lesson info step).
+          // Use a key that changes when the flow shape changes to force a fresh Stepper instance.
+          key: ValueKey<String>('stepper:${_isEdit ? 'edit' : 'new'}:${_userType}:${_stepKeys().length}'),
+          currentStep: _step.clamp(0, lastStep),
           steps: steps,
           onStepTapped: (i) {
             // Allow jumping backwards freely; forward only if previous steps are valid.

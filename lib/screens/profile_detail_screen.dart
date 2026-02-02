@@ -104,21 +104,22 @@ class ProfileDetailScreen extends StatelessWidget {
     String label, {
     required bool highlighted,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Chip(
       label: Text(
         label,
         style: TextStyle(
-          color: highlighted ? Colors.white : null,
+          color: highlighted ? scheme.onPrimary : scheme.onSurface,
           fontWeight: highlighted ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       backgroundColor: highlighted
-          ? Theme.of(context).colorScheme.primary
-          : Theme.of(context).colorScheme.surfaceContainerHighest,
+          ? scheme.primary
+          : scheme.surfaceContainerHighest,
       side: BorderSide(
         color: highlighted
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.surfaceContainerHighest,
+            ? scheme.primary
+            : scheme.surfaceContainerHighest,
       ),
     );
   }
@@ -757,7 +758,7 @@ class ProfileDetailScreen extends StatelessWidget {
                           ),
                         ),
                         // 거리 표시
-                        if (distanceLabel != null) ...[
+                        if (!isMyProfile && distanceLabel != null) ...[
                           const SizedBox(width: 8),
                           Text(
                             distanceLabel,
@@ -852,8 +853,8 @@ class ProfileDetailScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                   ],
                   
-                  // Lesson location (Trainer / Trainee 공통)
-                  if (teachingMethods != null && teachingMethods.isNotEmpty) ...[
+                  // Lesson location (Trainer only)
+                  if (userType == 'trainer' && teachingMethods != null && teachingMethods.isNotEmpty) ...[
                     const Text(
                       'Lesson location',
                       style: TextStyle(
