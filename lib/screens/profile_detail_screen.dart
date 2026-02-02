@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
@@ -9,6 +10,7 @@ import '../services/supabase_service.dart';
 import 'training_history_screen.dart';
 import 'chat_screen.dart';
 import '../utils/distance_formatter.dart';
+import '../theme/app_theme.dart';
 
 class ProfileDetailScreen extends StatelessWidget {
   final Map<String, dynamic> profile;
@@ -36,6 +38,36 @@ class ProfileDetailScreen extends StatelessWidget {
       default:
         return '';
     }
+  }
+
+  String _genderLabel(String? gender) {
+    if (gender == null) return '';
+    final g = gender.trim();
+    if (g.isEmpty) return '';
+    if (g == 'Prefer not to say') return '';
+    switch (g) {
+      case 'man':
+        return 'Man';
+      case 'woman':
+        return 'Woman';
+      case 'non-binary':
+        return 'Non-binary';
+      default:
+        return g;
+    }
+  }
+
+  double? _distanceMetersToProfile(Map<String, dynamic> otherProfile, Map<String, dynamic>? currentUserProfile) {
+    final cached = SupabaseService.lastKnownLocation.value;
+    final myLat = cached?.lat ?? (currentUserProfile?['latitude'] as num?)?.toDouble();
+    final myLon = cached?.lon ?? (currentUserProfile?['longitude'] as num?)?.toDouble();
+    if (myLat == null || myLon == null) return null;
+
+    final lat = (otherProfile['latitude'] as num?)?.toDouble();
+    final lon = (otherProfile['longitude'] as num?)?.toDouble();
+    if (lat == null || lon == null) return null;
+
+    return Geolocator.distanceBetween(myLat, myLon, lat, lon);
   }
 
   String _norm(String s) => s.trim().toLowerCase();
@@ -580,16 +612,23 @@ class ProfileDetailScreen extends StatelessWidget {
     final profileUserId = profile['user_id'] as String?;
     final isMyProfile = currentUserId != null && profileUserId != null && currentUserId == profileUserId;
     
+    final effectiveCurrentUserProfile = currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
+    final distanceMeters = (profile['distance_meters'] as num?)?.toDouble() ??
+        _distanceMetersToProfile(profile, effectiveCurrentUserProfile);
+    final distanceLabel = distanceMeters == null ? null : _formatDistance(distanceMeters);
+
     // Trainer이고 My Profile이 아닌 경우 AppBar에 이름, 거리, 나이대 표시
     final shouldShowCustomAppBar = !hideAppBar && !isMyProfile && userType == 'trainer';
     
     // AppBar 제목 생성
     Widget? appBarTitle;
     if (shouldShowCustomAppBar) {
-      final distanceText = profile['distance_meters'] != null
-          ? _formatDistance((profile['distance_meters'] as num).toDouble())
-          : null;
       final ageText = age != null ? _formatAgeRange(age, profile['created_at'] as String?) : null;
+      final genderText = _genderLabel(gender);
+      final ageGenderText = <String>[
+        if (ageText != null && ageText.isNotEmpty) ageText,
+        if (genderText.isNotEmpty) genderText,
+      ].join(' • ');
       
       appBarTitle = Row(
         mainAxisSize: MainAxisSize.min,
@@ -604,21 +643,10 @@ class ProfileDetailScreen extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (distanceText != null) ...[
+          if (ageGenderText.isNotEmpty) ...[
             const SizedBox(width: 8),
             Text(
-              distanceText,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-          if (ageText != null && ageText.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              ageText,
+              ageGenderText,
               style: TextStyle(
                 fontSize: 14,
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
@@ -686,6 +714,25 @@ class ProfileDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
+            // Distance (privacy-friendly) just below "Chat history"
+            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn && distanceLabel != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: Center(
+                  child: Text(
+                    distanceLabel,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.twinglGreen,
+                    ),
+                  ),
+                ),
+              ),
             
             // 프로필 정보
             Padding(
@@ -710,10 +757,10 @@ class ProfileDetailScreen extends StatelessWidget {
                           ),
                         ),
                         // 거리 표시
-                        if (profile['distance_meters'] != null) ...[
+                        if (distanceLabel != null) ...[
                           const SizedBox(width: 8),
                           Text(
-                            _formatDistance((profile['distance_meters'] as num).toDouble()),
+                            distanceLabel,
                             style: TextStyle(
                               fontSize: 14,
                               color: Theme.of(context).colorScheme.primary,
