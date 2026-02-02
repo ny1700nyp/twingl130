@@ -6,8 +6,8 @@ import 'package:appinio_swiper/appinio_swiper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
-import 'profile_detail_screen.dart';
 
 class GlobalTalentMatchingScreen extends StatefulWidget {
   const GlobalTalentMatchingScreen({super.key});
@@ -22,7 +22,6 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   bool _isLoading = true;
   bool _isEndOfDeck = false;
   List<Map<String, dynamic>> _cards = [];
-  Map<String, dynamic>? _myProfile;
 
   Set<String> _myKeywordsNorm = <String>{};
   final Map<String, ImageProvider> _imageProviderCache = <String, ImageProvider>{};
@@ -34,6 +33,73 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   }
 
   String _norm(String s) => s.trim().toLowerCase();
+
+  String? _ageRangeLabel(Map<String, dynamic> p) {
+    final raw = p['birthdate'] ?? p['birth_date'] ?? p['dob'];
+    DateTime? b;
+    if (raw is String && raw.trim().isNotEmpty) {
+      b = DateTime.tryParse(raw.trim());
+    } else if (raw is DateTime) {
+      b = raw;
+    }
+    if (b != null) {
+      final now = DateTime.now();
+      int age = now.year - b.year;
+      final hasHadBirthday = (now.month > b.month) || (now.month == b.month && now.day >= b.day);
+      if (!hasHadBirthday) age -= 1;
+      age = age.clamp(0, 130);
+      final range = (age ~/ 10) * 10;
+      return age > 0 ? '${range}s' : null;
+    }
+
+    final a = p['age'];
+    if (a is num) {
+      final age = a.toInt();
+      final range = (age ~/ 10) * 10;
+      return age > 0 ? '${range}s' : null;
+    }
+    if (a is String) {
+      final n = int.tryParse(a.trim());
+      if (n != null) {
+        final range = (n ~/ 10) * 10;
+        return n > 0 ? '${range}s' : null;
+      }
+    }
+    return null;
+  }
+
+  String? _lessonLocationLabel(Map<String, dynamic> p) {
+    final raw = p['lesson_locations'] ?? p['lesson_location'] ?? p['lesson_methods'];
+    final list = _stringListFromDynamic(raw).map(_norm).toList();
+    if (list.isEmpty) return null;
+    final hasOnline = list.contains('online');
+    final hasOnsite = list.contains('onsite') || list.contains('on-site') || list.contains('inperson') || list.contains('in-person');
+    if (hasOnline && hasOnsite) return 'Online, Onsite';
+    if (hasOnline) return 'Online';
+    if (hasOnsite) return 'Onsite';
+    return null;
+  }
+
+  String? _genderLabel(Map<String, dynamic> p) {
+    final raw = (p['gender'] as String?)?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final g = raw.toLowerCase();
+    if (g == 'prefer not to say' || g == 'prefer_not_to_say' || g == 'unknown') return null;
+    if (g == 'man' || g == 'male') return 'Man';
+    if (g == 'woman' || g == 'female') return 'Woman';
+    if (g == 'non-binary' || g == 'nonbinary') return 'Non-binary';
+    return null;
+  }
+
+  String? _rateLabel(Map<String, dynamic> p) {
+    final raw = p['tutoring_rate'] ?? p['rate'] ?? p['hourly_rate'];
+    if (raw == null) return null;
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    final n = int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (n == null) return null;
+    return '\$$n/hr';
+  }
 
   double _toRadians(double deg) => deg * (math.pi / 180.0);
 
@@ -141,7 +207,6 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     }
 
     final myProfile = await SupabaseService.getCurrentUserProfile();
-    _myProfile = myProfile;
     final userType = (myProfile?['user_type'] as String?)?.trim().toLowerCase();
     if (userType == null || userType.isEmpty) {
       if (!mounted) return;
@@ -212,14 +277,6 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
         currentUserId: currentUser.id,
         isMatch: isMatch,
         swipedProfile: card,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isMatch ? 'Added to favorites!' : 'Next.'),
-          duration: const Duration(seconds: 1),
-        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -320,158 +377,162 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
 
   Widget _buildSwipeCard(BuildContext context, Map<String, dynamic> p) {
     final name = p['name'] as String? ?? 'Unknown';
-    final matchCount = (p['match_count'] as int?) ?? 0;
 
     final distMeters = (p['distance_meters'] as num?)?.toDouble();
-    final distanceLabel = distMeters == null ? '' : 'Within ${formatDistanceMeters(distMeters)}';
+    final distanceLabel = distMeters == null ? null : formatDistanceMeters(distMeters);
+    final ageRangeLabel = _ageRangeLabel(p);
+    final genderLabel = _genderLabel(p);
+    final methodLabel = _lessonLocationLabel(p);
+    final rateLabel = _rateLabel(p);
 
     final talents = _stringListFromDynamic(p['talents']);
     final photoPath = _pickMainPhoto(p);
     final imageProvider = _imageProviderFromPath(photoPath);
+    final aboutMe = (p['about_me'] as String?)?.trim() ?? '';
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProfileDetailScreen(
-              profile: p,
-              currentUserProfile: _myProfile,
-            ),
-          ),
-        );
-      },
-      child: Card(
-        key: ValueKey<String>(p['user_id'] as String? ?? photoPath ?? name),
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
+    final matched = <String>[];
+    final rest = <String>[];
+    for (final t in talents) {
+      if (_myKeywordsNorm.contains(_norm(t))) {
+        matched.add(t);
+      } else {
+        rest.add(t);
+      }
+    }
+    final shownTalents = [...matched, ...rest].take(12).toList(growable: false);
+
+    return Card(
+      key: ValueKey<String>(p['user_id'] as String? ?? photoPath ?? name),
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Positioned.fill(
-              child: imageProvider == null
-                  ? Container(
-                      color: Theme.of(context).colorScheme.surfaceVariant,
-                      child: Icon(
-                        Icons.person,
-                        size: 96,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                      ),
-                    )
-                  : RepaintBoundary(
-                      child: Image(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        filterQuality: FilterQuality.medium,
-                      ),
-                    ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.0),
-                      Colors.black.withOpacity(0.70),
-                    ],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                            ),
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: SizedBox(
+                  width: 140,
+                  height: 140,
+                  child: imageProvider == null
+                      ? Container(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.person,
+                            size: 54,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                          ),
+                        )
+                      : RepaintBoundary(
+                          child: Image(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            filterQuality: FilterQuality.medium,
                           ),
                         ),
-                        if (distanceLabel.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            distanceLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.90),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          'Talent matches: ',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          '$matchCount',
-                          style: TextStyle(
-                            color: Colors.lightGreenAccent.withOpacity(0.95),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (talents.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: talents.take(12).map((k) {
-                          final isMatch = _myKeywordsNorm.contains(_norm(k));
-                          final bg = isMatch
-                              ? Theme.of(context).colorScheme.primary.withOpacity(0.90)
-                              : Colors.white.withOpacity(0.14);
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: bg,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: isMatch
-                                    ? Colors.white.withOpacity(0.18)
-                                    : Colors.white.withOpacity(0.08),
-                              ),
-                            ),
-                            child: Text(
-                              k,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.95),
-                                fontSize: 12,
-                                fontWeight: isMatch ? FontWeight.w800 : FontWeight.w600,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ],
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                [
+                  name,
+                  if (ageRangeLabel != null) ageRangeLabel,
+                  if (genderLabel != null) genderLabel,
+                ].join(' • '),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (distanceLabel != null || methodLabel != null)
+              Center(
+                child: Text(
+                  [
+                    if (distanceLabel != null) distanceLabel,
+                    if (methodLabel != null) methodLabel,
+                  ].join('  •  '),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
+                      ),
+                ),
+              ),
+            if (aboutMe.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                aboutMe,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.80),
+                      height: 1.25,
+                    ),
+              ),
+            ],
+            if (shownTalents.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'I can teach',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: shownTalents.map((k) {
+                  final isMatch = _myKeywordsNorm.contains(_norm(k));
+                  final bg = isMatch ? AppTheme.twinglGreen : Theme.of(context).colorScheme.surfaceContainerHighest;
+                  final fg = isMatch ? Colors.white : Theme.of(context).colorScheme.onSurface;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: bg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: isMatch ? Colors.transparent : AppTheme.twinglGreen,
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Text(
+                      k,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: fg,
+                            fontWeight: isMatch ? FontWeight.w900 : FontWeight.w700,
+                          ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Text(
+              'Tutoring rate',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              rateLabel ?? '—',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
             ),
           ],
         ),
@@ -483,7 +544,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Talent Matching'),
+        title: const Text('The Perfect Tutors, Anywhere'),
       ),
       body: SafeArea(
         child: _isLoading

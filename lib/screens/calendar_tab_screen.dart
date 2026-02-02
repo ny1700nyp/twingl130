@@ -4,7 +4,12 @@ import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
 
 class CalendarTabScreen extends StatefulWidget {
-  const CalendarTabScreen({super.key});
+  final int refreshToken;
+
+  const CalendarTabScreen({
+    super.key,
+    required this.refreshToken,
+  });
 
   @override
   State<CalendarTabScreen> createState() => _CalendarTabScreenState();
@@ -23,12 +28,19 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
     return (w - 80).clamp(320.0, 420.0);
   }
 
-  int _todMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
-
   @override
   void initState() {
     super.initState();
     _loadEvents();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarTabScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      // Calendar tab became active (or requested to refresh).
+      _loadEvents();
+    }
   }
 
   Future<void> _loadEvents() async {
@@ -125,6 +137,18 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
       default:
         return '';
     }
+  }
+
+  Widget _segLabel(String text) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _getEventsForDate(DateTime date) {
@@ -302,126 +326,35 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
     final id = event['id']?.toString() ?? '';
     if (id.isEmpty) return;
 
-    final titleCtrl = TextEditingController(text: _getEventTitle(event));
-    final descCtrl = TextEditingController(text: _getEventDescription(event));
-    DateTime start = _getEventStartTime(event);
-    DateTime end = _getEventEndTime(event);
+    final initialTitle = _getEventTitle(event);
+    final initialDesc = _getEventDescription(event);
+    final initialStart = _getEventStartTime(event);
+    final initialEnd = _getEventEndTime(event);
 
-    Future<void> pickStart(StateSetter setLocal) async {
-      final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(start));
-      if (t == null) return;
-      if (!mounted) return;
-      setLocal(() {
-        // Keep the same date; only adjust time.
-        start = DateTime(start.year, start.month, start.day, t.hour, t.minute);
-        if (!end.isAfter(start)) end = start.add(const Duration(hours: 1));
-      });
-    }
-
-    Future<void> pickEnd(StateSetter setLocal) async {
-      // Disallow selecting an end time before (or equal to) start time.
-      while (true) {
-        final minEnd = start.add(const Duration(minutes: 1));
-        final initial = end.isAfter(minEnd) ? end : minEnd;
-        final t = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(initial),
-        );
-        if (t == null) return;
-        if (!mounted) return;
-
-        final pickedMinutes = _todMinutes(t);
-        final minMinutes = _todMinutes(TimeOfDay.fromDateTime(minEnd));
-        if (pickedMinutes < minMinutes) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('End time must be after start time.')),
-          );
-          continue; // reopen time picker
-        }
-
-        setLocal(() {
-          // Keep the same date; only adjust time.
-          end = DateTime(end.year, end.month, end.day, t.hour, t.minute);
-          if (!end.isAfter(start)) end = start.add(const Duration(hours: 1));
-        });
-        return;
-      }
-    }
-
-    if (!mounted) return;
-    final saved = await showDialog<bool>(
+    final dialogWidth = _eventDialogWidth(context);
+    final result = await showDialog<_CalendarEventDialogResult>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Edit event'),
-          content: SizedBox(
-            width: _eventDialogWidth(ctx),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleCtrl,
-                    maxLines: 1,
-                    minLines: 1,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: descCtrl,
-                    minLines: 3,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'Description'),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Start'),
-                    subtitle:
-                        Text('${DateFormat('MMM d, yyyy').format(start)} ${DateFormat('h:mm a').format(start)}'),
-                    onTap: () => pickStart(setLocal),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('End'),
-                    subtitle: Text('${DateFormat('MMM d, yyyy').format(end)} ${DateFormat('h:mm a').format(end)}'),
-                    onTap: () => pickEnd(setLocal),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+      builder: (_) => _CalendarEventDialog(
+        dialogTitle: 'Edit event',
+        dialogWidth: dialogWidth,
+        mode: _CalendarEventDialogMode.edit,
+        date: DateTime(initialStart.year, initialStart.month, initialStart.day),
+        initialTitle: initialTitle,
+        initialDescription: initialDesc,
+        initialStart: initialStart,
+        initialEnd: initialEnd,
       ),
     );
 
-    if (saved != true) return;
-    final newTitle = titleCtrl.text.trim();
-    if (newTitle.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required.')));
-      return;
-    }
-    if (!end.isAfter(start)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('End must be after start.')));
-      return;
-    }
+    if (result == null) return;
 
     try {
       await SupabaseService.updateCalendarEvent(
         eventId: id,
-        title: newTitle,
-        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-        startTime: start,
-        endTime: end,
+        title: result.title,
+        description: result.description.isEmpty ? null : result.description,
+        startTime: result.start,
+        endTime: result.end,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved.')));
@@ -429,9 +362,6 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
-    } finally {
-      titleCtrl.dispose();
-      descCtrl.dispose();
     }
   }
 
@@ -443,193 +373,36 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
       return;
     }
 
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-
     final sel = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     final now = DateTime.now();
     final sameDay = sel.year == now.year && sel.month == now.month && sel.day == now.day;
 
-    // No default display for start/end; user must pick time.
-    // We still provide a reasonable initial time in the picker.
-    DateTime? start;
-    DateTime? end;
     final initialStartHour = sameDay ? (now.hour + 1).clamp(0, 23) : 10;
-    final initialStart = DateTime(sel.year, sel.month, sel.day, initialStartHour, 0);
-
-    Future<void> pickStart(StateSetter setLocal) async {
-      final base = start ?? initialStart;
-      final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(base));
-      if (t == null) return;
-      if (!mounted) return;
-      setLocal(() {
-        // Date is already selected by Day view; only pick time.
-        start = DateTime(sel.year, sel.month, sel.day, t.hour, t.minute);
-        // If previously selected end is now invalid, clear it so user must re-pick.
-        if (end != null && start != null && !end!.isAfter(start!)) {
-          end = null;
-        }
-      });
-    }
-
-    Future<void> pickEnd(StateSetter setLocal) async {
-      if (start == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a start time first.')),
-        );
-        return;
-      }
-      // Disallow selecting an end time before (or equal to) start time.
-      while (true) {
-        final minEnd = start!.add(const Duration(minutes: 1));
-        // If start is too late in the day, there may be no valid end time on the same date.
-        final sameDate = minEnd.year == sel.year && minEnd.month == sel.month && minEnd.day == sel.day;
-        if (!sameDate) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Start time is too late. Please choose an earlier start time.')),
-          );
-          return;
-        }
-
-        final defaultEnd = DateTime(sel.year, sel.month, sel.day, start!.hour, start!.minute)
-            .add(const Duration(hours: 1));
-        final initial = (end != null && end!.isAfter(minEnd))
-            ? end!
-            : (defaultEnd.isAfter(minEnd) ? defaultEnd : minEnd);
-        final t = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(initial),
-        );
-        if (t == null) return;
-        if (!mounted) return;
-
-        final pickedMinutes = _todMinutes(t);
-        final minMinutes = _todMinutes(TimeOfDay.fromDateTime(minEnd));
-        if (pickedMinutes < minMinutes) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('End time must be after start time.')),
-          );
-          continue; // reopen time picker
-        }
-
-        setLocal(() {
-          // Date is already selected by Day view; only pick time.
-          end = DateTime(sel.year, sel.month, sel.day, t.hour, t.minute);
-        });
-        return;
-      }
-    }
-
-    if (!mounted) return;
-    final saved = await showDialog<bool>(
+    final suggestedInitialStart = DateTime(sel.year, sel.month, sel.day, initialStartHour, 0);
+    final dialogWidth = _eventDialogWidth(context);
+    final result = await showDialog<_CalendarEventDialogResult>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Add event'),
-          content: SizedBox(
-            width: _eventDialogWidth(ctx),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleCtrl,
-                    maxLines: 1,
-                    minLines: 1,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: descCtrl,
-                    minLines: 3,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'Description'),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Start'),
-                    subtitle: Text(
-                      start == null ? 'Select time' : DateFormat('h:mm a').format(start!),
-                      style: TextStyle(
-                        color: start == null
-                            ? Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55)
-                            : null,
-                      ),
-                    ),
-                    onTap: () => pickStart(setLocal),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('End'),
-                    subtitle: Text(
-                      end == null
-                          ? (start == null ? 'Select start time first' : 'Select time')
-                          : DateFormat('h:mm a').format(end!),
-                      style: TextStyle(
-                        color: end == null
-                            ? Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55)
-                            : null,
-                      ),
-                    ),
-                    onTap: start == null ? null : () => pickEnd(setLocal),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Save')),
-          ],
-        ),
+      builder: (_) => _CalendarEventDialog(
+        dialogTitle: 'Add event',
+        dialogWidth: dialogWidth,
+        mode: _CalendarEventDialogMode.add,
+        date: sel,
+        suggestedInitialStart: suggestedInitialStart,
       ),
     );
 
-    if (saved != true) {
-      titleCtrl.dispose();
-      descCtrl.dispose();
-      return;
-    }
-
-    final newTitle = titleCtrl.text.trim();
-    final newDesc = descCtrl.text.trim();
-
-    titleCtrl.dispose();
-    descCtrl.dispose();
-
-    if (newTitle.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required.')));
-      return;
-    }
-    if (start == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Start time is required.')));
-      return;
-    }
-    if (end == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('End time is required.')));
-      return;
-    }
-    if (!end!.isAfter(start!)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('End must be after start.')));
-      return;
-    }
+    if (result == null) return;
 
     try {
       await SupabaseService.createCalendarEvent(
         userId: currentUser.id,
-        title: newTitle,
-        description: newDesc.isEmpty ? '' : newDesc,
-        startTime: start!,
-        endTime: end!,
+        title: result.title,
+        description: result.description.isEmpty ? '' : result.description,
+        startTime: result.start,
+        endTime: result.end,
         conversationId: null,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added.')));
       _loadEvents();
     } catch (e) {
       if (!mounted) return;
@@ -657,12 +430,14 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
           child: Column(
             children: [
               // View type selector
-              SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: 0, label: Text('Day')),
-                  ButtonSegment(value: 1, label: Text('Week')),
-                  ButtonSegment(value: 2, label: Text('Month')),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<int>(
+                  segments: [
+                    ButtonSegment(value: 0, label: _segLabel('Day')),
+                    ButtonSegment(value: 1, label: _segLabel('Week')),
+                    ButtonSegment(value: 2, label: _segLabel('Month')),
+                  ],
                 selected: {_selectedViewIndex},
                 onSelectionChanged: (Set<int> newSelection) {
                   setState(() {
@@ -672,6 +447,7 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
                   });
                   _loadEvents();
                 },
+                ),
               ),
               const SizedBox(height: 12),
               // Date navigation
@@ -691,6 +467,9 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -833,13 +612,19 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
                     padding: const EdgeInsets.all(8),
                     child: Column(
                       children: [
-                        Text(
-                          DateFormat('EEE').format(day),
-                          style: TextStyle(
-                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                            color: isToday
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            DateFormat('EEE').format(day),
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.clip,
+                            style: TextStyle(
+                              fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                              color: isToday
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            ),
                           ),
                         ),
                         Text(
@@ -944,9 +729,8 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
       final isToday = day.year == DateTime.now().year && day.month == DateTime.now().month && day.day == DateTime.now().day;
       final isSelected = day.year == _selectedDate.year && day.month == _selectedDate.month && day.day == _selectedDate.day;
       final dayEvents = _getEventsForDate(day);
-      final maxPreview = 2;
-      final previews = dayEvents.take(maxPreview).toList();
-      final more = dayEvents.length - previews.length;
+      final firstEvent = dayEvents.isNotEmpty ? dayEvents.first : null;
+      final more = dayEvents.length > 1 ? (dayEvents.length - 1) : 0;
 
       return InkWell(
         onTap: () => _goToDay(day),
@@ -970,32 +754,41 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
                 ),
               ),
               const SizedBox(height: 2),
-              for (final e in previews)
+              if (firstEvent != null)
                 InkWell(
-                  onTap: () => _openEventDetail(e),
+                  onTap: () => _openEventDetail(firstEvent),
                   child: Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      _getEventTitle(e),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              if (more > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    '+$more',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-                      fontWeight: FontWeight.w700,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _getEventTitle(firstEvent),
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (more > 0) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            '+$more',
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.clip,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -1014,12 +807,18 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
               for (final w in weekLabels)
                 Expanded(
                   child: Center(
-                    child: Text(
-                      w,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                          ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        w,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                      ),
                     ),
                   ),
                 ),
@@ -1040,6 +839,290 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+enum _CalendarEventDialogMode { add, edit }
+
+class _CalendarEventDialogResult {
+  final String title;
+  final String description;
+  final DateTime start;
+  final DateTime end;
+
+  const _CalendarEventDialogResult({
+    required this.title,
+    required this.description,
+    required this.start,
+    required this.end,
+  });
+}
+
+class _CalendarEventDialog extends StatefulWidget {
+  final String dialogTitle;
+  final double dialogWidth;
+  final _CalendarEventDialogMode mode;
+  final DateTime date; // date is implicit; pickers only choose time.
+
+  final String? initialTitle;
+  final String? initialDescription;
+  final DateTime? initialStart;
+  final DateTime? initialEnd;
+  final DateTime? suggestedInitialStart; // used in "add" mode (no default display)
+
+  const _CalendarEventDialog({
+    required this.dialogTitle,
+    required this.dialogWidth,
+    required this.mode,
+    required this.date,
+    this.initialTitle,
+    this.initialDescription,
+    this.initialStart,
+    this.initialEnd,
+    this.suggestedInitialStart,
+  });
+
+  @override
+  State<_CalendarEventDialog> createState() => _CalendarEventDialogState();
+}
+
+class _CalendarEventDialogState extends State<_CalendarEventDialog> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descCtrl;
+
+  DateTime? _start;
+  DateTime? _end;
+  String? _error;
+
+  int _todMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.initialTitle ?? '');
+    _descCtrl = TextEditingController(text: widget.initialDescription ?? '');
+    _start = widget.initialStart;
+    _end = widget.initialEnd;
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  DateTime _withTime(DateTime date, TimeOfDay t) => DateTime(date.year, date.month, date.day, t.hour, t.minute);
+
+  Future<void> _pickStart() async {
+    setState(() {
+      _error = null;
+    });
+
+    final base = _start ??
+        widget.suggestedInitialStart ??
+        DateTime(widget.date.year, widget.date.month, widget.date.day, 10, 0);
+
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(base),
+    );
+    if (t == null) return;
+    if (!mounted) return;
+
+    final pickedStart = _withTime(widget.date, t);
+    setState(() {
+      _start = pickedStart;
+      if (widget.mode == _CalendarEventDialogMode.edit) {
+        if (_end != null && !_end!.isAfter(_start!)) {
+          _end = _start!.add(const Duration(hours: 1));
+        }
+      } else {
+        // In add mode, if previously selected end is now invalid, clear it so user must re-pick.
+        if (_end != null && _start != null && !_end!.isAfter(_start!)) {
+          _end = null;
+        }
+      }
+    });
+  }
+
+  Future<void> _pickEnd() async {
+    setState(() {
+      _error = null;
+    });
+
+    if (_start == null) {
+      setState(() {
+        _error = 'Please select a start time first.';
+      });
+      return;
+    }
+
+    // Disallow selecting an end time before (or equal to) start time.
+    while (true) {
+      final minEnd = _start!.add(const Duration(minutes: 1));
+
+      // If start is too late in the day, there may be no valid end time on the same date.
+      final sameDate = minEnd.year == widget.date.year &&
+          minEnd.month == widget.date.month &&
+          minEnd.day == widget.date.day;
+      if (!sameDate) {
+        setState(() {
+          _error = 'Start time is too late. Please choose an earlier start time.';
+        });
+        return;
+      }
+
+      final defaultEnd = DateTime(widget.date.year, widget.date.month, widget.date.day, _start!.hour, _start!.minute)
+          .add(const Duration(hours: 1));
+      final initial = (_end != null && _end!.isAfter(minEnd))
+          ? _end!
+          : (defaultEnd.isAfter(minEnd) ? defaultEnd : minEnd);
+
+      final t = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(initial),
+      );
+      if (t == null) return;
+      if (!mounted) return;
+
+      final pickedMinutes = _todMinutes(t);
+      final minMinutes = _todMinutes(TimeOfDay.fromDateTime(minEnd));
+      if (pickedMinutes < minMinutes) {
+        setState(() {
+          _error = 'End time must be after start time.';
+        });
+        continue; // reopen time picker
+      }
+
+      setState(() {
+        _end = _withTime(widget.date, t);
+      });
+      return;
+    }
+  }
+
+  void _submit() {
+    final title = _titleCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+
+    if (title.isEmpty) {
+      setState(() {
+        _error = 'Title is required.';
+      });
+      return;
+    }
+    if (_start == null) {
+      setState(() {
+        _error = 'Start time is required.';
+      });
+      return;
+    }
+    if (_end == null) {
+      setState(() {
+        _error = 'End time is required.';
+      });
+      return;
+    }
+    if (!_end!.isAfter(_start!)) {
+      setState(() {
+        _error = 'End must be after start.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _CalendarEventDialogResult(
+        title: title,
+        description: desc,
+        start: _start!,
+        end: _end!,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.mode == _CalendarEventDialogMode.edit;
+    final startLabel = () {
+      if (_start == null) return 'Select time';
+      if (isEdit) {
+        return '${DateFormat('MMM d, yyyy').format(_start!)} ${DateFormat('h:mm a').format(_start!)}';
+      }
+      return DateFormat('h:mm a').format(_start!);
+    }();
+    final endLabel = () {
+      if (_end == null) return _start == null ? 'Select start time first' : 'Select time';
+      if (isEdit) {
+        return '${DateFormat('MMM d, yyyy').format(_end!)} ${DateFormat('h:mm a').format(_end!)}';
+      }
+      return DateFormat('h:mm a').format(_end!);
+    }();
+
+    final placeholderColor = Theme.of(context).colorScheme.onSurface.withOpacity(0.55);
+
+    return AlertDialog(
+      title: Text(widget.dialogTitle),
+      content: SizedBox(
+        width: widget.dialogWidth,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_error != null) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _titleCtrl,
+                maxLines: 1,
+                minLines: 1,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _descCtrl,
+                minLines: 3,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start'),
+                subtitle: Text(
+                  startLabel,
+                  style: TextStyle(color: _start == null ? placeholderColor : null),
+                ),
+                onTap: _pickStart,
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End'),
+                subtitle: Text(
+                  endLabel,
+                  style: TextStyle(color: _end == null ? placeholderColor : null),
+                ),
+                onTap: _start == null ? null : _pickEnd,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        ElevatedButton(onPressed: _submit, child: const Text('Save')),
+      ],
     );
   }
 }

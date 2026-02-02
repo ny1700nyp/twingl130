@@ -16,6 +16,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   int _chatResetToken = 0;
+  int _calendarRefreshToken = 0;
 
   @override
   void initState() {
@@ -78,7 +79,7 @@ class _MainScreenState extends State<MainScreen> {
         children: [
           const HomeScreen(),
           ChatDashboard(resetToken: _chatResetToken),
-          const CalendarDashboard(),
+          CalendarDashboard(refreshToken: _calendarRefreshToken),
           const _MorePlaceholder(),
         ],
       ),
@@ -96,6 +97,10 @@ class _MainScreenState extends State<MainScreen> {
                 // If we are entering Chat tab from another tab, reset filters.
                 if (idx == 1 && _currentIndex != 1) {
                   _chatResetToken += 1;
+                }
+                // If we are entering Calendar tab from another tab, refresh events.
+                if (idx == 2 && _currentIndex != 2) {
+                  _calendarRefreshToken += 1;
                 }
                 _currentIndex = idx;
               });

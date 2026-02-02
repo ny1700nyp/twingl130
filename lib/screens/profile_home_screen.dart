@@ -31,9 +31,12 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
 
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      SupabaseService.getCurrentUserProfileCached(user.id);
-      SupabaseService.getFavoriteTrainersCached(user.id);
-      SupabaseService.refreshBootstrapCachesIfChanged(user.id);
+      // Ensure disk caches hydrate before running the "only-if-changed" refresh.
+      () async {
+        await SupabaseService.getCurrentUserProfileCached(user.id);
+        await SupabaseService.getFavoriteTrainersCached(user.id);
+        await SupabaseService.refreshBootstrapCachesIfChanged(user.id);
+      }();
     }
 
     _locationCacheListener = () {

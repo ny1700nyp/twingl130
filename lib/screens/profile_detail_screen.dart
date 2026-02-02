@@ -587,7 +587,7 @@ class ProfileDetailScreen extends StatelessWidget {
     Widget? appBarTitle;
     if (shouldShowCustomAppBar) {
       final distanceText = profile['distance_meters'] != null
-          ? 'Within ${_formatDistance((profile['distance_meters'] as num).toDouble())}'
+          ? _formatDistance((profile['distance_meters'] as num).toDouble())
           : null;
       final ageText = age != null ? _formatAgeRange(age, profile['created_at'] as String?) : null;
       
@@ -713,7 +713,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         if (profile['distance_meters'] != null) ...[
                           const SizedBox(width: 8),
                           Text(
-                            'Within ${_formatDistance((profile['distance_meters'] as num).toDouble())}',
+                            _formatDistance((profile['distance_meters'] as num).toDouble()),
                             style: TextStyle(
                               fontSize: 14,
                               color: Theme.of(context).colorScheme.primary,

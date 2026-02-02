@@ -93,11 +93,37 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
     if (otherUserId.trim().isEmpty) return;
     if (_removing.contains(otherUserId)) return;
 
-    // Optimistic UI/cache update: remove immediately.
-    final removed = _profiles.firstWhere(
+    final target = _profiles.firstWhere(
       (p) => (p['user_id'] as String?) == otherUserId,
       orElse: () => <String, dynamic>{},
     );
+    final otherName = (target['name'] as String?)?.trim().isNotEmpty == true
+        ? (target['name'] as String).trim()
+        : 'this user';
+
+    // Confirm before removing
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove favorite?'),
+        content: Text('Remove $otherName from your favorites?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    // Optimistic UI/cache update: remove immediately.
+    final removed = target;
 
     setState(() {
       _removing.add(otherUserId);
@@ -121,11 +147,6 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
 
         // Minimal DB touching: only verify if needed (throttled).
         Future.microtask(() => SupabaseService.refreshBootstrapCachesIfChanged(user.id));
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Removed')),
-        );
       } catch (e) {
         // If DB delete failed, re-sync from DB (may restore the item).
         await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);

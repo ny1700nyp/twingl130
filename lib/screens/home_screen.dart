@@ -6,6 +6,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
 import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
@@ -25,15 +26,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isResolvingCity = false;
   late final VoidCallback _locationListener;
+  Future<DailyQuote?>? _dailyQuoteFuture;
+  final Map<String, ImageProvider> _avatarProviderCache = <String, ImageProvider>{};
 
   @override
   void initState() {
     super.initState();
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      SupabaseService.getCurrentUserProfileCached(user.id);
-      SupabaseService.getFavoriteTrainersCached(user.id);
-      SupabaseService.refreshBootstrapCachesIfChanged(user.id);
+      // Ensure disk caches hydrate before running the "only-if-changed" refresh.
+      () async {
+        await SupabaseService.getCurrentUserProfileCached(user.id);
+        await SupabaseService.getFavoriteTrainersCached(user.id);
+        await SupabaseService.refreshBootstrapCachesIfChanged(user.id);
+      }();
+      _dailyQuoteFuture = QuoteService.getDailyQuote(userId: user.id);
     }
 
     _locationListener = () {
@@ -54,23 +61,89 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  int _hash32(String s) {
+    // FNV-1a 32-bit
+    int h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h ^= c;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h;
+  }
+
   ImageProvider? _imageProviderFromPath(String? path) {
     if (path == null || path.isEmpty) return null;
+    final key = path.startsWith('data:image') ? 'data:${_hash32(path)}' : path;
+    final cached = _avatarProviderCache[key];
+    if (cached != null) return cached;
+
     if (path.startsWith('data:image')) {
       try {
-        return MemoryImage(base64Decode(path.split(',').last));
+        final provider = MemoryImage(base64Decode(path.split(',').last));
+        _avatarProviderCache[key] = provider;
+        return provider;
       } catch (_) {
         return null;
       }
     }
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      return NetworkImage(path);
+      final provider = NetworkImage(path);
+      _avatarProviderCache[key] = provider;
+      return provider;
     }
     if (!kIsWeb) {
       // Local file path handling could be added if needed.
       return null;
     }
     return null;
+  }
+
+  Widget _homeActionRow({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withAlpha(22),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right,
+              color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _ensureCityResolved() async {
@@ -227,18 +300,9 @@ class _HomeScreenState extends State<HomeScreen> {
         title: title,
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            final user = Supabase.instance.client.auth.currentUser;
-            if (user == null) return;
-            await SupabaseService.refreshCurrentUserProfileCache(user.id);
-            await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);
-            await SupabaseService.refreshBootstrapCachesIfChanged(user.id);
-            await _ensureCityResolved();
-          },
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
               // My Profile
               ValueListenableBuilder<Map<String, dynamic>?>(
                 valueListenable: SupabaseService.currentUserProfileCache,
@@ -251,6 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     leading: CircleAvatar(
                       radius: 22,
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       backgroundImage: avatar,
                       child: avatar == null ? const Icon(Icons.person) : null,
                     ),
@@ -259,18 +324,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          tooltip: 'Find nearby talent',
-                          onPressed: _openNearbyTalent,
-                          icon: const Icon(Icons.search),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        IconButton(
-                          tooltip: 'Talent match (any distance)',
-                          onPressed: _openTalentMatch,
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          visualDensity: VisualDensity.compact,
-                        ),
                         PopupMenuButton<String>(
                           tooltip: 'Settings',
                           icon: const Icon(Icons.settings_outlined),
@@ -286,6 +339,69 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 },
+              ),
+
+              // Daily quote (between profile and favorites)
+              if (_dailyQuoteFuture != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                  child: FutureBuilder<DailyQuote?>(
+                    future: _dailyQuoteFuture,
+                    builder: (context, snap) {
+                      final q = snap.data;
+                      if (q == null) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '“${q.quote}”',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.35,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '— ${q.author}',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: Theme.of(context).colorScheme.onSurface.withAlpha(170),
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+              // Home actions (above favorites list)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+                child: Column(
+                  children: [
+                    _homeActionRow(
+                      icon: Icons.search,
+                      title: 'Meet Tutors in Your Area',
+                      onTap: _openNearbyTalent,
+                    ),
+                    const SizedBox(height: 10),
+                    _homeActionRow(
+                      icon: Icons.auto_awesome_outlined,
+                      title: 'The Perfect Tutors, Anywhere',
+                      onTap: _openTalentMatch,
+                    ),
+                  ],
+                ),
               ),
 
               const Padding(
@@ -332,6 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return ListTile(
                     key: ValueKey(userId),
                         leading: CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                           backgroundImage: avatar,
                           child: avatar == null ? const Icon(Icons.person) : null,
                         ),
@@ -364,7 +481,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
             ],
-          ),
         ),
       ),
     );

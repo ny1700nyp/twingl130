@@ -4,7 +4,12 @@ import 'calendar_tab_screen.dart';
 
 /// KakaoTalk-style tab: Calendar dashboard.
 class CalendarDashboard extends StatelessWidget {
-  const CalendarDashboard({super.key});
+  final int refreshToken;
+
+  const CalendarDashboard({
+    super.key,
+    required this.refreshToken,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +18,7 @@ class CalendarDashboard extends StatelessWidget {
         automaticallyImplyLeading: false,
         title: const Text('Calendar'),
       ),
-      body: const SafeArea(child: CalendarTabScreen()),
+      body: SafeArea(child: CalendarTabScreen(refreshToken: refreshToken)),
     );
   }
 }

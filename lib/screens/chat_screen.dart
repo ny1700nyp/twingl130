@@ -9,7 +9,6 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
-import '../utils/calendar_date_parser.dart';
 import '../utils/time_utils.dart';
 import 'profile_detail_screen.dart';
 
@@ -36,7 +35,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Map<String, dynamic>? _conversation;
   bool _isSending = false;
-  bool _scheduleSupported = true;
 
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _conversationChannel;
@@ -78,14 +76,6 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     setState(() {
       _conversation = conv;
-      // DB schema must include these columns for scheduling UX to work.
-      // If missing, hide schedule UI and show a clear message when user interacts.
-      _scheduleSupported = conv != null &&
-          conv.containsKey('schedule_state') &&
-          conv.containsKey('scheduled_start_time') &&
-          conv.containsKey('scheduled_end_time') &&
-          conv.containsKey('trainer_schedule_agreed') &&
-          conv.containsKey('trainee_schedule_agreed');
     });
 
     // Mark read
@@ -182,44 +172,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return ((_conversation?['status'] as String?) ?? '').trim().toLowerCase();
   }
 
-  ({String skill, String method})? _extractRequestInfo(Map<String, dynamic> m) {
-    if ((m['type'] as String?) != 'request') return null;
-    // Prefer metadata
-    final metadata = m['metadata'];
-    if (metadata is Map) {
-      final mm = Map<String, dynamic>.from(metadata);
-      final skill = (mm['skill'] as String?)?.trim();
-      final method = (mm['method'] as String?)?.trim();
-      if (skill != null && skill.isNotEmpty && method != null && method.isNotEmpty) {
-        return (skill: skill, method: method);
-      }
-    }
-    // Fallback to text pattern: "Request: skill (method)"
-    final text = (m['content'] as String?) ?? (m['message_text'] as String?) ?? '';
-    final match = RegExp(r'^Request:\s*(.+?)\s*\((.+?)\)\s*$', caseSensitive: false).firstMatch(text.trim());
-    if (match != null) {
-      final skill = match.group(1)?.trim() ?? '';
-      final method = match.group(2)?.trim() ?? '';
-      if (skill.isNotEmpty && method.isNotEmpty) return (skill: skill, method: method);
-    }
-    return null;
-  }
-
-  ({String skill, String method})? _latestRequestInfo(List<Map<String, dynamic>> messages) {
-    for (int i = messages.length - 1; i >= 0; i--) {
-      final info = _extractRequestInfo(messages[i]);
-      if (info != null) return info;
-    }
-    return null;
-  }
-
-  String _prettyMethod(String method) {
-    final m = method.trim().toLowerCase();
-    if (m == 'onsite' || m == 'on-site' || m == 'inperson' || m == 'in-person') return 'Onsite';
-    if (m == 'online') return 'Online';
-    return method.trim();
-  }
-
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -233,7 +185,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isSystem(Map<String, dynamic> m) => (m['type'] as String?) == 'system';
-  bool _isRequest(Map<String, dynamic> m) => (m['type'] as String?) == 'request';
 
   bool _shouldHideSystemMessage(Map<String, dynamic> m) {
     if (!_isSystem(m)) return false;
@@ -453,19 +404,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  DateTime? _conversationScheduledStartLocal() {
-    final s = _conversation?['scheduled_start_time'] as String?;
-    if (s == null || s.isEmpty) return null;
-    final dt = DateTime.tryParse(s);
-    return dt?.toLocal();
-  }
-
-  DateTime? _conversationScheduledEndLocal() {
-    final s = _conversation?['scheduled_end_time'] as String?;
-    if (s == null || s.isEmpty) return null;
-    final dt = DateTime.tryParse(s);
-    return dt?.toLocal();
-  }
+  // Scheduling / calendar integration removed.
 
   DateTime? _messageCreatedAtLocal(Map<String, dynamic> m) {
     final raw = m['created_at']?.toString() ?? '';
@@ -494,390 +433,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return DateFormat('HH:mm').format(curr);
   }
 
-  String _formatScheduledLabel(DateTime startLocal, DateTime endLocal) {
-    final fmt = DateFormat('MMM d, h:mm a');
-    return '${fmt.format(startLocal)} - ${DateFormat('h:mm a').format(endLocal)}';
-  }
-
-  // Pick the "active" proposed time for showing the schedule UI.
-  ({DateTime startLocal, DateTime endLocal, String sourceText})? _activeScheduleProposal(
-    List<Map<String, dynamic>> messages,
-  ) {
-    final scheduledStart = _conversationScheduledStartLocal();
-    final scheduledEnd = _conversationScheduledEndLocal();
-    final scheduleState = (_conversation?['schedule_state'] as String?)?.trim().toLowerCase();
-
-    // Latest parsed date/time message (new proposal)
-    ({DateTime startLocal, DateTime endLocal, String sourceText})? latestParsed;
-    for (int i = messages.length - 1; i >= 0; i--) {
-      final m = messages[i];
-      if (_isSystem(m) || _isRequest(m)) continue;
-      final text = (m['content'] as String?) ?? (m['message_text'] as String?) ?? '';
-      final dt = extractDateTime(text);
-      if (dt != null) {
-        final end = dt.add(const Duration(hours: 1));
-        latestParsed = (startLocal: dt, endLocal: end, sourceText: text);
-        break;
-      }
-    }
-
-    // If a new date/time is mentioned again, treat it as a new proposal even if we already had an agreed schedule.
-    if (latestParsed != null) {
-      if (scheduledStart == null || scheduledEnd == null) return latestParsed;
-      if (scheduleState == null || scheduleState == 'declined') return latestParsed;
-      final diffMin = latestParsed.startLocal.difference(scheduledStart).inMinutes.abs();
-      if (diffMin >= 1) return latestParsed;
-    }
-
-    // Fallback to stored schedule (already agreed) if no new proposal.
-    if (scheduledStart != null && scheduledEnd != null) {
-      return (
-        startLocal: scheduledStart,
-        endLocal: scheduledEnd,
-        sourceText: _formatScheduledLabel(scheduledStart, scheduledEnd),
-      );
-    }
-    return latestParsed;
-  }
-
-  Future<void> _respondSchedule({
-    required DateTime proposedStartLocal,
-    required DateTime proposedEndLocal,
-    required bool agree,
-  }) async {
-    final currentUser = Supabase.instance.client.auth.currentUser;
-    final conv = _conversation;
-    if (currentUser == null || conv == null) return;
-    if (!_scheduleSupported) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Scheduling requires DB migration: run MIGRATE_CONVERSATIONS_SCHEDULE.sql'),
-        ),
-      );
-      return;
-    }
-
-    final trainerId = conv['trainer_id'] as String?;
-    final traineeId = conv['trainee_id'] as String?;
-    final isMeTrainer = trainerId == currentUser.id;
-
-    bool? prevTrainerAgreed = conv['trainer_schedule_agreed'] as bool?;
-    bool? prevTraineeAgreed = conv['trainee_schedule_agreed'] as bool?;
-
-    // If this is a different proposal than the stored schedule, reset both agree states (UI + DB behavior).
-    final existingStartLocal = TimeUtils.tryParseIsoToLocal(conv['scheduled_start_time'] as String?);
-    final existingState = (conv['schedule_state'] as String?)?.trim().toLowerCase();
-    final isDifferentProposal = existingStartLocal == null ||
-        existingStartLocal.difference(proposedStartLocal).inMinutes.abs() >= 1 ||
-        existingState == null ||
-        existingState == 'declined';
-    if (isDifferentProposal) {
-      prevTrainerAgreed = null;
-      prevTraineeAgreed = null;
-    }
-
-    final nextTrainerAgreed = isMeTrainer ? agree : prevTrainerAgreed;
-    final nextTraineeAgreed = isMeTrainer ? prevTraineeAgreed : agree;
-
-    String nextState = 'proposed';
-    if (agree == false) {
-      nextState = 'declined';
-    } else if (nextTrainerAgreed == true && nextTraineeAgreed == true) {
-      nextState = 'agreed';
-    }
-
-    // Optimistic UI update so the pressed button highlights immediately.
-    setState(() {
-      _conversation = <String, dynamic>{
-        ...conv,
-        'scheduled_start_time': proposedStartLocal.toUtc().toIso8601String(),
-        'scheduled_end_time': proposedEndLocal.toUtc().toIso8601String(),
-        'schedule_state': nextState,
-        'trainer_schedule_agreed': nextTrainerAgreed,
-        'trainee_schedule_agreed': nextTraineeAgreed,
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-    });
-
-    try {
-      final updated = await SupabaseService.respondToConversationSchedule(
-        conversationId: widget.conversationId,
-        proposedStartLocal: proposedStartLocal,
-        proposedEndLocal: proposedEndLocal,
-        agree: agree,
-      );
-      if (!mounted) return;
-      if (updated != null) {
-        if (kDebugMode) {
-          debugPrint(
-            '[chat] schedule updated state=${updated['schedule_state']} '
-            'trainer=${updated['trainer_schedule_agreed']} trainee=${updated['trainee_schedule_agreed']}',
-          );
-        }
-        setState(() => _conversation = updated);
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('[chat] schedule update failed: $e');
-      if (!mounted) return;
-      // Common case: DB migration not applied or schema cache not refreshed.
-      final msg = e.toString();
-      final missingColumn = msg.contains("PGRST204") && msg.contains("schedule_state");
-      if (missingColumn) {
-        setState(() {
-          _conversation = conv; // revert optimistic UI
-          _scheduleSupported = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('DB missing schedule columns. Run MIGRATE_CONVERSATIONS_SCHEDULE.sql then reload schema.'),
-          ),
-        );
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update schedule: $e')),
-      );
-    }
-  }
-
-  Future<bool> _isScheduleAlreadySavedForUser({
-    required String userId,
-    required DateTime startUtc,
-    required DateTime endUtc,
-  }) async {
-    try {
-      final res = await Supabase.instance.client
-          .from('calendar_events')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('conversation_id', widget.conversationId)
-          .eq('start_time', startUtc.toIso8601String())
-          .eq('end_time', endUtc.toIso8601String())
-          .limit(1);
-      return res is List && res.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _addScheduleToCalendar({
-    required String userId,
-    required DateTime startLocal,
-    required DateTime endLocal,
-  }) async {
-    try {
-      final startUtc = startLocal.toUtc();
-      final endUtc = endLocal.toUtc();
-
-      // conflict check with other events (simple overlap window)
-      final events = await SupabaseService.getCalendarEvents(
-        userId: userId,
-        startDate: startUtc.subtract(const Duration(hours: 8)),
-        endDate: endUtc.add(const Duration(hours: 8)),
-      );
-      final hasConflict = events.any((e) {
-        final convId = e['conversation_id']?.toString();
-        // Ignore the same conversation event (idempotent)
-        if (convId == widget.conversationId) return false;
-        final s = DateTime.tryParse((e['start_time'] as String?) ?? '')?.toUtc();
-        final en = DateTime.tryParse((e['end_time'] as String?) ?? '')?.toUtc();
-        if (s == null || en == null) return false;
-        return startUtc.isBefore(en) && endUtc.isAfter(s);
-      });
-      if (hasConflict) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Calendar conflict detected.')),
-        );
-        return;
-      }
-
-      final otherName = ((widget.otherProfile?['name'] as String?) ?? 'Training').trim();
-      final cachedMessages =
-          SupabaseService.chatMessagesCacheForConversation(widget.conversationId).value ??
-              const <Map<String, dynamic>>[];
-      final latestReq = _latestRequestInfo(cachedMessages);
-      final title = latestReq == null
-          ? 'Training with $otherName'
-          : '$otherName - ${latestReq.skill} (${_prettyMethod(latestReq.method)})';
-      final description = latestReq == null
-          ? 'Scheduled from chat'
-          : 'Lesson: ${latestReq.skill}\nLesson Location: ${_prettyMethod(latestReq.method)}';
-
-      await SupabaseService.createCalendarEvent(
-        userId: userId,
-        title: title,
-        description: description,
-        startTime: startUtc,
-        endTime: endUtc,
-        conversationId: widget.conversationId,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Added to your calendar.')),
-      );
-      // No system message to the other user (per new UX).
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add to calendar: $e')),
-      );
-    }
-  }
-
-  Widget _buildScheduleAgreementArea({
-    required DateTime proposedStartLocal,
-    required DateTime proposedEndLocal,
-    required String dateTimeText,
-  }) {
-    final conv = _conversation;
-    final currentUser = Supabase.instance.client.auth.currentUser;
-    if (conv == null || currentUser == null) return const SizedBox.shrink();
-    if (!_scheduleSupported) return const SizedBox.shrink();
-
-    final status = _conversationStatus();
-    if (status != 'accepted') return const SizedBox.shrink();
-
-    final trainerId = conv['trainer_id'] as String?;
-    final traineeId = conv['trainee_id'] as String?;
-    final isMeTrainer = trainerId == currentUser.id;
-
-    // If this message is proposing a different time than the current stored schedule,
-    // ignore previous agree flags so user must confirm again.
-    final existingStartLocal = TimeUtils.tryParseIsoToLocal(conv['scheduled_start_time'] as String?);
-    final existingState = (conv['schedule_state'] as String?)?.trim().toLowerCase();
-    final isDifferentProposal = existingStartLocal == null ||
-        existingStartLocal.difference(proposedStartLocal).inMinutes.abs() >= 1 ||
-        existingState == null ||
-        existingState == 'declined';
-
-    final trainerAgreed = isDifferentProposal ? null : (conv['trainer_schedule_agreed'] as bool?);
-    final traineeAgreed = isDifferentProposal ? null : (conv['trainee_schedule_agreed'] as bool?);
-    final scheduleState = isDifferentProposal ? 'proposed' : (conv['schedule_state'] as String?);
-
-    final bothAgreed = trainerAgreed == true && traineeAgreed == true;
-    final myChoice = isMeTrainer ? trainerAgreed : traineeAgreed;
-    final noSelected = myChoice == false;
-    final yesSelected = myChoice == true;
-
-    final label = _formatScheduledLabel(proposedStartLocal, proposedEndLocal);
-
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Do you agree $label ?'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: noSelected
-                    ? ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                          foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                        onPressed: () => _respondSchedule(
-                          proposedStartLocal: proposedStartLocal,
-                          proposedEndLocal: proposedEndLocal,
-                          agree: false,
-                        ),
-                        child: const Text('No'),
-                      )
-                    : OutlinedButton(
-                        onPressed: () => _respondSchedule(
-                          proposedStartLocal: proposedStartLocal,
-                          proposedEndLocal: proposedEndLocal,
-                          agree: false,
-                        ),
-                  child: const Text('No'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: yesSelected
-                    ? ElevatedButton(
-                        onPressed: () => _respondSchedule(
-                          proposedStartLocal: proposedStartLocal,
-                          proposedEndLocal: proposedEndLocal,
-                          agree: true,
-                        ),
-                        child: const Text('Yes'),
-                      )
-                    : OutlinedButton(
-                        onPressed: () => _respondSchedule(
-                          proposedStartLocal: proposedStartLocal,
-                          proposedEndLocal: proposedEndLocal,
-                          agree: true,
-                        ),
-                        child: const Text('Yes'),
-                      ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if ((scheduleState == 'declined') || (trainerAgreed == false) || (traineeAgreed == false))
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('Declined', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ),
-          if (bothAgreed) ...[
-            const SizedBox(height: 10),
-            FutureBuilder<bool>(
-              future: _isScheduleAlreadySavedForUser(
-                userId: currentUser.id,
-                startUtc: proposedStartLocal.toUtc(),
-                endUtc: proposedEndLocal.toUtc(),
-              ),
-              builder: (context, snap) {
-                final saved = snap.data == true;
-                if (saved) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Saved to your calendar'),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Now discuss the lesson location and fee.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withAlpha(170),
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ],
-                  );
-                }
-                return SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _addScheduleToCalendar(
-                      userId: currentUser.id,
-                      startLocal: proposedStartLocal,
-                      endLocal: proposedEndLocal,
-                    ),
-                    child: const Text('Add to Calendar'),
-                  ),
-                );
-              },
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildMessageBubble(
     Map<String, dynamic> m, {
     required Map<String, dynamic>? prevMessage,
-    required ({DateTime startLocal, DateTime endLocal, String sourceText})? activeProposal,
   }) {
     if (_shouldHideSystemMessage(m)) return const SizedBox.shrink();
 
@@ -900,11 +458,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
             : Theme.of(context).colorScheme.surfaceVariant;
     final align = isSystem ? Alignment.center : (isMe ? Alignment.centerRight : Alignment.centerLeft);
-
-    final dt = (!isSystem && !_isRequest(m)) ? extractDateTime(text) : null;
-    final showScheduleForThisMessage = activeProposal != null &&
-        dt != null &&
-        dt.difference(activeProposal.startLocal).inMinutes.abs() < 1;
 
     return Align(
       alignment: align,
@@ -960,12 +513,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ],
               ),
-              if (showScheduleForThisMessage)
-                _buildScheduleAgreementArea(
-                  proposedStartLocal: activeProposal.startLocal,
-                  proposedEndLocal: activeProposal.endLocal,
-                  dateTimeText: activeProposal.sourceText,
-                ),
               if (type == 'request')
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -1124,12 +671,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final showPending = status == 'pending';
     final showDeclined = status == 'declined';
 
-    final scheduledStart = _conversationScheduledStartLocal();
-    final scheduledEnd = _conversationScheduledEndLocal();
-    final showScheduledLabel =
-        scheduledStart != null && scheduledEnd != null && (_conversation?['schedule_state'] as String?) == 'agreed';
-    final scheduledLabel = showScheduledLabel ? _formatScheduledLabel(scheduledStart, scheduledEnd) : null;
-
     final title = Row(
       children: [
         Expanded(child: _otherNameButton(otherName)),
@@ -1152,15 +693,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
-        if (scheduledLabel != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: Text(
-              'Scheduled: $scheduledLabel',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
       ],
     );
 
@@ -1178,7 +710,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   final messages = value.where((m) => !_shouldHideSystemMessage(m)).toList();
-                  final activeProposal = _activeScheduleProposal(messages);
 
                   return ListView.builder(
                     controller: _scrollController,
@@ -1187,7 +718,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         _buildMessageBubble(
                           messages[i],
                           prevMessage: i > 0 ? messages[i - 1] : null,
-                          activeProposal: activeProposal,
                         ),
                   );
                 },

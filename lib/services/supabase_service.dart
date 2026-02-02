@@ -38,6 +38,8 @@ class SupabaseService {
 
   // Disk hydration guard
   static final Set<String> _diskHydratedUserIds = <String>{};
+  // One-time "repair" guards (per app session) for older disk caches without markers.
+  static final Set<String> _avatarRehydrateAttemptedUserIds = <String>{};
 
   // Throttling / single-flight
   static DateTime? _bootstrapRefreshLastAt;
@@ -63,6 +65,10 @@ class SupabaseService {
     final main = out['main_photo_path'];
     if (main is String && _isDataUrl(main)) {
       out['main_photo_path'] = null;
+      // Mark as compacted so we can re-hydrate images from DB on next app start.
+      out['_compacted_main_photo'] = true;
+    } else {
+      out.remove('_compacted_main_photo');
     }
     // Avoid persisting huge arrays/base64.
     out.remove('profile_photos');
@@ -148,6 +154,7 @@ class SupabaseService {
     _chatMessagesPersistLastAt.clear();
 
     _diskHydratedUserIds.clear();
+    _avatarRehydrateAttemptedUserIds.clear();
   }
 
   /// Load cached profile/favorites/location/city/chat-conversations from disk into memory.
@@ -739,7 +746,13 @@ class SupabaseService {
       final lmId = (lm is Map) ? (lm['id']?.toString() ?? '') : '';
       final lmAt = (lm is Map) ? (lm['created_at']?.toString() ?? '') : '';
       final sched = c['schedule_state']?.toString() ?? '';
-      return '$id|$updated|$status|$unread|$lmId|$lmAt|$sched';
+      final other = c['other_profile'];
+      final otherMap = other is Map ? Map<String, dynamic>.from(other) : null;
+      final otherHasPhoto =
+          ((otherMap?['main_photo_path'] as String?) ?? '').trim().isNotEmpty ? '1' : '0';
+      final otherCompacted = (otherMap?['_compacted_main_photo'] == true) ? '1' : '0';
+      // Include lightweight avatar presence markers so disk-compacted avatars trigger one refresh.
+      return '$id|$updated|$status|$unread|$lmId|$lmAt|$sched|$otherHasPhoto|$otherCompacted';
     }).toList()
       ..sort();
     return parts.join('~');
@@ -1367,6 +1380,16 @@ class SupabaseService {
         final cacheUpdatedAt = (currentUserProfileCache.value?['updated_at'] as String?)?.trim();
         final profileChanged =
             dbUpdatedAt != null && dbUpdatedAt.isNotEmpty && dbUpdatedAt != cacheUpdatedAt;
+        final profileNeedsAvatarRehydrate =
+            (currentUserProfileCache.value?['_compacted_main_photo'] == true);
+        final cacheAvatarEmpty = (((currentUserProfileCache.value?['main_photo_path'] as String?) ?? '')
+                .trim()
+                .isEmpty) &&
+            ((currentUserProfileCache.value?['name'] as String?)?.trim().isNotEmpty == true);
+        final profileNeedsAvatarRepairFallback = cacheUpdatedAt != null &&
+            cacheUpdatedAt.isNotEmpty &&
+            cacheAvatarEmpty &&
+            !_avatarRehydrateAttemptedUserIds.contains(userId);
 
         // Favorites swiped ids fingerprint
         final matches = await supabase
@@ -1386,21 +1409,32 @@ class SupabaseService {
             .toList()
           ..sort();
         final favoritesChanged = jsonEncode(dbIds) != jsonEncode(cachedFavIds);
+        final favoritesNeedAvatarRehydrate = (favoriteTrainersCache.value ?? const <Map<String, dynamic>>[])
+            .any((p) => (p['_compacted_main_photo'] == true));
+        final favoritesNeedAvatarRepairFallback =
+            !_avatarRehydrateAttemptedUserIds.contains('fav:$userId') &&
+                (favoriteTrainersCache.value ?? const <Map<String, dynamic>>[]).any((p) {
+                  final hasName = (p['name'] as String?)?.trim().isNotEmpty == true;
+                  final hasAvatar = ((p['main_photo_path'] as String?) ?? '').trim().isNotEmpty;
+                  return hasName && !hasAvatar;
+                });
 
-        if (profileChanged) {
+        if (profileChanged || profileNeedsAvatarRehydrate || profileNeedsAvatarRepairFallback) {
           final fresh = await _fetchProfileByUserId(userId);
           if (fresh != null) {
             _currentUserProfileCacheUserId = userId;
             currentUserProfileCache.value = fresh;
             await _persistProfileToDisk(userId, fresh);
           }
+          _avatarRehydrateAttemptedUserIds.add(userId);
         }
 
-        if (favoritesChanged) {
+        if (favoritesChanged || favoritesNeedAvatarRehydrate || favoritesNeedAvatarRepairFallback) {
           final freshFav = dbIds.isEmpty ? <Map<String, dynamic>>[] : await _fetchFavoriteTrainersFromDb(userId);
           _favoriteTrainersCacheUserId = userId;
           favoriteTrainersCache.value = freshFav;
           await _persistFavoritesToDisk(userId, freshFav);
+          _avatarRehydrateAttemptedUserIds.add('fav:$userId');
         }
       } catch (e) {
         print('refreshBootstrapCachesIfChanged failed: $e');
