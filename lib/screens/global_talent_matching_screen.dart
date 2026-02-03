@@ -176,12 +176,13 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   }
 
   Future<void> _precacheTopImages(List<Map<String, dynamic>> cards) async {
+    if (!mounted) return;
     final toPrecache = cards.take(6).toList(growable: false);
     final futures = <Future<void>>[];
     for (final p in toPrecache) {
       final photoPath = _pickMainPhoto(p);
       final provider = _imageProviderFromPath(photoPath);
-      if (provider != null) {
+      if (provider != null && mounted) {
         futures.add(precacheImage(provider, context));
       }
     }
@@ -206,7 +207,15 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       return;
     }
 
-    final myProfile = await SupabaseService.getCurrentUserProfile();
+    // 프로필(캐시)과 스와이프 목록을 동시에 요청해 대기 시간 단축
+    final cacheAndSwiped = await Future.wait(<Future<dynamic>>[
+      SupabaseService.getCurrentUserProfileCached(user.id),
+      SupabaseService.getSwipedUserIds(user.id),
+    ]);
+    var myProfile = cacheAndSwiped[0] as Map<String, dynamic>?;
+    final swipedIds = cacheAndSwiped[1] as Set<String>;
+    if (myProfile == null) myProfile = await SupabaseService.getCurrentUserProfile();
+
     final userType = (myProfile?['user_type'] as String?)?.trim().toLowerCase();
     if (userType == null || userType.isEmpty) {
       if (!mounted) return;
@@ -227,6 +236,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       userTalentsOrGoals: myGoals,
       currentUserId: user.id,
       limit: 30,
+      preloadedSwipedIds: swipedIds,
     );
 
     // Add distance_meters client-side for privacy-friendly display in UI.
@@ -244,14 +254,13 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     }
 
     if (!mounted) return;
-    await _precacheTopImages(cards);
-    if (!mounted) return;
-
     setState(() {
       _cards = cards;
       _isLoading = false;
       _isEndOfDeck = false;
     });
+    // 이미지 프리캐시는 비동기로 진행 (카드 표시를 막지 않음)
+    _precacheTopImages(cards);
   }
 
   Future<void> _handleSwipeEnd(int previousIndex, int targetIndex, SwiperActivity activity) async {
@@ -602,7 +611,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
                               ),
                               const SizedBox(width: 40),
                               _buildCircleActionButton(
-                                color: Colors.green,
+                                color: AppTheme.twinglGreen,
                                 icon: Icons.thumb_up_alt,
                                 onTap: () => _swiperController.swipeRight(),
                               ),

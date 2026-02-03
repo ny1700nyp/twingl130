@@ -1128,14 +1128,8 @@ class SupabaseService {
     return targetNorm.intersection(myKeywordsNorm).length;
   }
 
-  /// [Meet Tutors in your area] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; ≤30km.
-  static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
-    required List<String> myGoals,
-    required double currentLatitude,
-    required double currentLongitude,
-    required String currentUserId,
-    double maxDistanceMeters = 30000,
-  }) async {
+  /// Fetches swiped user ids for a user (for parallel use with profile/card loading).
+  static Future<Set<String>> getSwipedUserIds(String currentUserId) async {
     try {
       final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
       final swipedIds = <String>{};
@@ -1143,17 +1137,40 @@ class SupabaseService {
         final id = (e as Map)['swiped_user_id'] as String?;
         if (id != null && id.isNotEmpty) swipedIds.add(id);
       }
+      return swipedIds;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// [Meet Tutors in your area] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; ≤30km.
+  static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
+    required List<String> myGoals,
+    required double currentLatitude,
+    required double currentLongitude,
+    required String currentUserId,
+    double maxDistanceMeters = 30000,
+    Set<String>? preloadedSwipedIds,
+  }) async {
+    try {
       final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
-      final response = await supabase
+      final profilesFuture = supabase
           .from('profiles')
           .select()
           .inFilter('user_type', ['tutor', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
-      final list = response
-          .map((e) => Map<String, dynamic>.from(e))
+      final results = await Future.wait(<Future<dynamic>>[
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        profilesFuture,
+      ]);
+      final swipedIds = results[0] as Set<String>;
+      final response = results[1];
+
+      final list = (response as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
             return id.isNotEmpty && !swipedIds.contains(id);
@@ -1244,25 +1261,27 @@ class SupabaseService {
     required double currentLongitude,
     required String currentUserId,
     double maxDistanceMeters = 30000,
+    Set<String>? preloadedSwipedIds,
   }) async {
     try {
-      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
-      final swipedIds = <String>{};
-      for (final e in swiped) {
-        final id = (e as Map)['swiped_user_id'] as String?;
-        if (id != null && id.isNotEmpty) swipedIds.add(id);
-      }
       final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
-      final response = await supabase
+      final profilesFuture = supabase
           .from('profiles')
           .select()
           .inFilter('user_type', ['tutor', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
-      final list = response
-          .map((e) => Map<String, dynamic>.from(e))
+      final results = await Future.wait(<Future<dynamic>>[
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        profilesFuture,
+      ]);
+      final swipedIds = results[0] as Set<String>;
+      final response = results[1];
+
+      final list = (response as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
             return id.isNotEmpty && !swipedIds.contains(id);
@@ -1311,25 +1330,27 @@ class SupabaseService {
     required String currentUserId,
     double maxDistanceMeters = 30000,
     int limit = 30,
+    Set<String>? preloadedSwipedIds,
   }) async {
     try {
-      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
-      final swipedIds = <String>{};
-      for (final e in swiped) {
-        final id = (e as Map)['swiped_user_id'] as String?;
-        if (id != null && id.isNotEmpty) swipedIds.add(id);
-      }
       final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
-      final response = await supabase
+      final profilesFuture = supabase
           .from('profiles')
           .select()
           .inFilter('user_type', ['student', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
-      final list = response
-          .map((e) => Map<String, dynamic>.from(e))
+      final results = await Future.wait(<Future<dynamic>>[
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        profilesFuture,
+      ]);
+      final swipedIds = results[0] as Set<String>;
+      final response = results[1];
+
+      final list = (response as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
             return id.isNotEmpty && !swipedIds.contains(id);
@@ -1376,31 +1397,29 @@ class SupabaseService {
     required List<String> userTalentsOrGoals,
     required String currentUserId,
     int limit = 100,
+    Set<String>? preloadedSwipedIds,
   }) async {
     try {
       // NEW rule: match User's GOALS ↔ Target's TALENTS. Only Student/Twiner see this screen.
       final targetTypes = ['tutor', 'twiner'];
 
-      final swiped = await supabase
-          .from('matches')
-          .select('swiped_user_id')
-          .eq('user_id', currentUserId);
-      final swipedIds = <String>{};
-      for (final e in swiped) {
-        final id = (e as Map)['swiped_user_id'] as String?;
-        if (id != null && id.isNotEmpty) swipedIds.add(id);
-      }
-
-      final response = await supabase
+      final profilesFuture = supabase
           .from('profiles')
           .select()
           .inFilter('user_type', targetTypes)
           .neq('user_id', currentUserId)
           .limit(limit);
 
+      final results = await Future.wait(<Future<dynamic>>[
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        profilesFuture,
+      ]);
+      final swipedIds = results[0] as Set<String>;
+      final response = results[1];
+
       final keywords = userTalentsOrGoals.map((e) => e.toLowerCase().trim()).where((e) => e.isNotEmpty).toSet();
-      final list = response
-          .map((e) => Map<String, dynamic>.from(e))
+      final list = (response as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
             return id.isNotEmpty && !swipedIds.contains(id);

@@ -313,7 +313,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         case 'work':
           return Colors.indigo;
         case 'child_care':
-          return Colors.green;
+          return AppTheme.twinglGreen;
         default:
           return Colors.grey;
       }

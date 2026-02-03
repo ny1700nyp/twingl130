@@ -114,6 +114,10 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/app_icon.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
+  # Adaptive icon: 모든 기기에서 아이콘이 크게·일관되게 보이도록
+  adaptive_icon_background: "#F9FAFB"
+  adaptive_icon_foreground: "assets/app_icon.png"
+  adaptive_icon_foreground_inset: 0  # 0 = 패딩 없음 → 아이콘이 더 크게 표시 (기본 16%)
   web:
     generate: true
     image_path: "assets/app_icon.png"

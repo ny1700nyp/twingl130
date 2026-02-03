@@ -182,53 +182,50 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: () => _load(force: true),
-              child: _profiles.isEmpty
-                  ? ListView(
-                      children: const [
-                        SizedBox(height: 120),
-                        Center(child: Text('No favorite trainers yet.')),
-                      ],
-                    )
-                  : ListView.builder(
-                      itemCount: _profiles.length,
-                      itemBuilder: (context, i) {
-                        final p = _profiles[i];
-                        final name = (p['name'] as String?) ?? 'Unknown';
-                        final otherUserId = (p['user_id'] as String?) ?? '';
-                        final avatar = _avatarProvider(p['main_photo_path'] as String?);
-                        return ListTile(
-                          key: ValueKey(otherUserId),
-                          leading: AvatarWithTypeBadge(
-                            radius: 22,
-                            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            backgroundImage: avatar,
-                            userType: p['user_type'] as String?,
-                          ),
-                          title: Text(name),
-                          trailing: IconButton(
-                            tooltip: 'Remove',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed:
-                                (otherUserId.isEmpty || _removing.contains(otherUserId)) ? null : () => _removeFavorite(otherUserId),
-                          ),
-                          onTap: otherUserId.isEmpty
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => PublicProfileScreen(
-                                        userId: otherUserId,
-                                        currentUserProfile: SupabaseService.currentUserProfileCache.value,
-                                      ),
-                                    ),
-                                  );
-                                },
-                        );
-                      },
-                    ),
-            ),
+          : _profiles.isEmpty
+              ? ListView(
+                  children: const [
+                    SizedBox(height: 120),
+                    Center(child: Text('No favorite trainers yet.')),
+                  ],
+                )
+              : ListView.builder(
+                  itemCount: _profiles.length,
+                  itemBuilder: (context, i) {
+                    final p = _profiles[i];
+                    final name = (p['name'] as String?) ?? 'Unknown';
+                    final otherUserId = (p['user_id'] as String?) ?? '';
+                    final avatar = _avatarProvider(p['main_photo_path'] as String?);
+                    return ListTile(
+                      key: ValueKey(otherUserId),
+                      leading: AvatarWithTypeBadge(
+                        radius: 22,
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        backgroundImage: avatar,
+                        userType: p['user_type'] as String?,
+                      ),
+                      title: Text(name),
+                      trailing: IconButton(
+                        tooltip: 'Remove',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed:
+                            (otherUserId.isEmpty || _removing.contains(otherUserId)) ? null : () => _removeFavorite(otherUserId),
+                      ),
+                      onTap: otherUserId.isEmpty
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PublicProfileScreen(
+                                    userId: otherUserId,
+                                    currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                  ),
+                                ),
+                              );
+                            },
+                    );
+                  },
+                ),
     );
   }
 }

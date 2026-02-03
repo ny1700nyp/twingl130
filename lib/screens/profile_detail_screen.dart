@@ -1410,6 +1410,10 @@ Future<void> showProfileDetailSheet(
   Map<String, dynamic>? currentUserProfile,
 }) async {
   final effectiveCurrent = currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
+  // 시트 드래그 시 재빌드되어도 동일한 Future를 쓰도록, 시트 밖에서 한 번만 생성
+  final Future<Map<String, dynamic>?>? sheetProfileFuture = (profile == null && userId != null)
+      ? (isMyProfile ? SupabaseService.getCurrentUserProfileCached(userId) : SupabaseService.getPublicProfile(userId))
+      : null;
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -1454,11 +1458,9 @@ Future<void> showProfileDetailSheet(
                           hideDistance: hideDistance,
                           currentUserProfile: effectiveCurrent,
                         )
-                      : (userId != null
+                      : (sheetProfileFuture != null
                           ? FutureBuilder<Map<String, dynamic>?>(
-                              future: isMyProfile
-                                  ? SupabaseService.getCurrentUserProfileCached(userId)
-                                  : SupabaseService.getPublicProfile(userId),
+                              future: sheetProfileFuture,
                               builder: (context, snap) {
                                 if (snap.connectionState == ConnectionState.waiting) {
                                   return const Center(child: CircularProgressIndicator());

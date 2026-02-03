@@ -284,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (!showLocation) {
           // If city is not available, do not show "Enable location" at all.
-          return const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800);
+          return const TwinglWordmark(fontSize: 30, fontWeight: FontWeight.w800);
         }
 
         // City label is display-only (do not allow tapping).
@@ -292,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800),
+            const TwinglWordmark(fontSize: 30, fontWeight: FontWeight.w800),
             const SizedBox(width: 10),
             Row(
               children: [

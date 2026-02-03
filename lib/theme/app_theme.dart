@@ -8,9 +8,14 @@ class AppTheme {
   static const Color tertiaryGreen = Color(0xFF10B981); // Emerald-500
   static const Color successGreen = Color(0xFF10B981); // Emerald-500
 
-  // Wordmark color (Google Green)
-  static const Color twinglGreen = Color(0xFF34A853);
-  
+  // Wordmark color (테마 그린, primary와 동일)
+  static const Color twinglGreen = primaryGreen;
+
+  // User badge colors (Twingl Identity)
+  static const Color twinglMint = Color(0xFF2DD4BF);   // Student (S)
+  static const Color twinglPurple = Color(0xFF7C3AED); // Tutor (T)
+  static const Color twinglYellow = Color(0xFFF59E0B); // Twiner (TW) – Gold/Amber
+
   // Helper method to get theme colors
   static Color getPendingColor() => secondaryGold;
   static Color getAcceptedColor() => successGreen;

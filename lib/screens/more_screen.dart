@@ -3,7 +3,104 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 import 'onboarding_screen.dart';
+
+/// Shows a custom dialog explaining the given identity (student, tutor, twiner).
+void showIdentityDialog(BuildContext context, String type) {
+  final t = (type.trim().toLowerCase());
+  Color headerColor;
+  String letter;
+  String title;
+  String description;
+  switch (t) {
+    case 'student':
+      headerColor = AppTheme.twinglMint;
+      letter = 'S';
+      title = 'The Learner';
+      description =
+          'Focus on your growth. Define your goals and find the perfect mentors nearby or globally.';
+      break;
+    case 'tutor':
+      headerColor = AppTheme.twinglPurple;
+      letter = 'T';
+      title = 'The Guide';
+      description =
+          'Share your expertise. Turn your talents into value by helping others achieve their dreams.';
+      break;
+    case 'twiner':
+      headerColor = AppTheme.twinglYellow;
+      letter = 'TW';
+      title = 'The Connector';
+      description =
+          'The ultimate Twingl experience. You teach what you know and learn what you love. You are the heart of our community.';
+      break;
+    default:
+      return;
+  }
+
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            color: headerColor,
+            child: Center(
+              child: Text(
+                letter,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 48,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                        color: Colors.black87,
+                        height: 1.4,
+                      ),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Got it'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -63,7 +160,11 @@ class _MoreScreenState extends State<MoreScreen> {
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             children: [
-              // Twiner Conversion card (Tutor or Student only)
+              // User Badge Guide (Twingl Identity)
+              const _BadgeGuideCard(),
+              const SizedBox(height: 24),
+
+              // Become a Tutor/Student too (Twingl Identity 다음 배치)
               if (showTwinerCard) ...[
                 _TwinerConversionCard(
                   isTutor: isTutor,
@@ -139,7 +240,7 @@ class _TwinerConversionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final headline =
-        isTutor ? 'Become a Student too.' : 'Become a Tutor too.';
+        isTutor ? 'Become a Student too' : 'Become a Tutor too';
     final subtext = isTutor
         ? 'Great teachers never stop learning. Expand your perspective by achieving new goals.'
         : 'Teaching is the best way to master your skills. Share your talent with neighbors.';
@@ -173,6 +274,15 @@ class _TwinerConversionCard extends StatelessWidget {
                     height: 1.4,
                   ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'You will get the Twiner badge.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.twinglYellow,
+                    height: 1.3,
+                  ),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -204,6 +314,147 @@ class _TwinerConversionCard extends StatelessWidget {
               const SizedBox(height: 10),
               _previewRow(context, icon: Icons.school_outlined, title: 'Student Candidates in the area'),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// User Badge Guide: Twingl Identity – S, T, TW badges with same card style as Lesson Space Finder.
+class _BadgeGuideCard extends StatelessWidget {
+  const _BadgeGuideCard();
+
+  static const double _badgeSize = 48;
+
+  Widget _badge({
+    required BuildContext context,
+    required Color color,
+    required String letter,
+    required String label,
+    bool highlight = false,
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: _badgeSize,
+              height: _badgeSize,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: highlight
+                    ? [
+                        BoxShadow(
+                          color: color.withOpacity(0.5),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                letter,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: letter.length > 1 ? 14 : 22,
+                  height: 1,
+                ),
+              ),
+            ),
+            if (highlight)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Icon(
+                  Icons.star,
+                  size: 16,
+                  color: AppTheme.twinglYellow,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+        ),
+      ],
+    );
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(_badgeSize),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: content,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Twingl Identity',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Learn, Share, and Connect.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _badge(
+                  context: context,
+                  color: AppTheme.twinglMint,
+                  letter: 'S',
+                  label: 'Student',
+                  onTap: () => showIdentityDialog(context, 'student'),
+                ),
+                _badge(
+                  context: context,
+                  color: AppTheme.twinglPurple,
+                  letter: 'T',
+                  label: 'Tutor',
+                  onTap: () => showIdentityDialog(context, 'tutor'),
+                ),
+                _badge(
+                  context: context,
+                  color: AppTheme.twinglYellow,
+                  letter: 'TW',
+                  label: 'Twiner',
+                  highlight: true,
+                  onTap: () => showIdentityDialog(context, 'twiner'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -306,7 +557,7 @@ class _LessonSpaceFinderCard extends StatelessWidget {
                 _gridTile(
                   context,
                   icon: Icons.school,
-                  iconColor: Colors.green,
+                  iconColor: AppTheme.twinglGreen,
                   label: 'School Facilities',
                   url: 'https://www.facilitron.com/',
                 ),

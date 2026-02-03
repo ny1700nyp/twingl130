@@ -16,11 +16,10 @@ class SplashScreen extends StatelessWidget {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Twingl 텍스트
-            const TwinglWordmark(fontSize: 48, fontWeight: FontWeight.bold),
+            const TwinglWordmark(fontSize: 72, fontWeight: FontWeight.bold),
             const SizedBox(height: 16),
-            // "Find the Master Next Door." 텍스트
             Text(
               'Find the Master Next Door.',
               style: GoogleFonts.quicksand(

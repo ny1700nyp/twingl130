@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../app_navigation.dart' show navigatorKey;
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/twingl_wordmark.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -188,7 +189,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: isDark ? AppTheme.backgroundDark : AppTheme.backgroundLight,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -199,10 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: InkWell(
                   onTap: _isLoading ? null : _signInAnonymouslyAndGoOnboarding,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                    child: const TwinglWordmark(fontSize: 32, fontWeight: FontWeight.bold),
-                  ),
+                  child: const TwinglWordmark(fontSize: 48, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 8),

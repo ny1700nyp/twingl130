@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Avatar with a same-size circular badge to its right: T (blue), S (mint), TW (purple).
+import '../theme/app_theme.dart';
+
+/// Avatar with a same-size circular badge to its right.
+/// Badge colors match More > Twingl Identity: S (twinglMint), T (twinglPurple), TW (twinglYellow).
 class AvatarWithTypeBadge extends StatelessWidget {
   const AvatarWithTypeBadge({
     super.key,
@@ -18,9 +21,9 @@ class AvatarWithTypeBadge extends StatelessWidget {
 
   static Color? _colorForUserType(String? type) {
     final t = (type ?? '').trim().toLowerCase();
-    if (t == 'tutor') return const Color(0xFF4285F4); // blue
-    if (t == 'student') return const Color(0xFF6EE7B7); // mint
-    if (t == 'twiner') return const Color(0xFF7C3AED); // purple
+    if (t == 'tutor') return AppTheme.twinglPurple;
+    if (t == 'student') return AppTheme.twinglMint;
+    if (t == 'twiner') return AppTheme.twinglYellow;
     return null;
   }
 
@@ -48,7 +51,7 @@ class AvatarWithTypeBadge extends StatelessWidget {
         label,
         style: TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.bold,
           fontSize: radius * (label.length > 1 ? 0.65 : 0.85),
           height: 1,
         ),

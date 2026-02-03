@@ -199,7 +199,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const TwinglWordmark(fontSize: 20, fontWeight: FontWeight.w800),
+            const TwinglWordmark(fontSize: 30, fontWeight: FontWeight.w800),
             const SizedBox(width: 10),
             InkWell(
               onTap: _isResolvingCity ? null : _refreshCityFromGps,

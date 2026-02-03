@@ -555,6 +555,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (otherUserId.isEmpty) return;
 
     if (!mounted) return;
+    // 시트 드래그 시 재빌드되어도 로딩이 다시 뜨지 않도록, Future를 한 번만 생성
+    final profileFuture = SupabaseService.getPublicProfile(otherUserId);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -592,7 +594,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(height: 10),
                   Flexible(
                     child: FutureBuilder<Map<String, dynamic>?>(
-                      future: SupabaseService.getPublicProfile(otherUserId),
+                      future: profileFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
