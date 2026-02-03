@@ -218,7 +218,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       return;
     }
 
-    // NEW rule: match MY GOALS ↔ TARGET TALENTS. Only Student/Stutor use this screen.
+    // NEW rule: match MY GOALS ↔ TARGET TALENTS. Only Student/Twiner use this screen.
     final myGoals = SupabaseService.getProfileGoals(myProfile ?? {});
     _myKeywordsNorm = myGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
 

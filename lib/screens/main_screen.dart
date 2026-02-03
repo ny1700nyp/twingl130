@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'calendar_dashboard.dart';
 import 'chat_dashboard.dart';
 import 'home_screen.dart';
+import 'more_screen.dart';
 import '../services/supabase_service.dart';
 
 class MainScreen extends StatefulWidget {
@@ -80,7 +81,7 @@ class _MainScreenState extends State<MainScreen> {
           const HomeScreen(),
           ChatDashboard(resetToken: _chatResetToken),
           CalendarDashboard(refreshToken: _calendarRefreshToken),
-          const _MorePlaceholder(),
+          const MoreScreen(),
         ],
       ),
       bottomNavigationBar: ValueListenableBuilder<List<Map<String, dynamic>>?>(
@@ -130,20 +131,4 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class _MorePlaceholder extends StatelessWidget {
-  const _MorePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('More'),
-      ),
-      body: const SafeArea(
-        child: Center(child: Text('Coming soon')),
-      ),
-    );
-  }
-}
 

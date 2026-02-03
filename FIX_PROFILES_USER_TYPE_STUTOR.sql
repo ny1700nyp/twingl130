@@ -1,13 +1,13 @@
--- Fix: allow user_type = 'stutor' (resolve 23514 check constraint violation)
+-- Fix: allow user_type = 'twiner' (resolve 23514 check constraint violation)
 -- Run in Supabase SQL Editor.
 
--- 1) Drop existing check (allows only tutor, student, tudent)
+-- 1) Drop existing check
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_user_type_check;
 
--- 2) Rename existing tudent → stutor (if any)
-UPDATE profiles SET user_type = 'stutor' WHERE user_type = 'tudent';
+-- 2) Migrate stutor → twiner (if any)
+UPDATE profiles SET user_type = 'twiner' WHERE user_type = 'stutor';
 
--- 3) Add new check (tutor, student, stutor)
+-- 3) Add new check (tutor, student, twiner)
 ALTER TABLE profiles
   ADD CONSTRAINT profiles_user_type_check
-  CHECK (user_type IN ('tutor', 'student', 'stutor'));
+  CHECK (user_type IN ('tutor', 'student', 'twiner'));

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -19,6 +18,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
   List<Map<String, dynamic>> _profiles = [];
   late final VoidCallback _cacheListener;
   final Set<String> _removing = <String>{};
+  final Map<String, ImageProvider?> _avatarCache = {};
 
   @override
   void initState() {
@@ -26,6 +26,12 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
     _cacheListener = () {
       final cached = SupabaseService.favoriteTrainersCache.value;
       if (cached == null) return;
+      // 동일한 목록(같은 user_id 순서)이면 setState 생략 → 제거 후 돌아올 때 이중 rebuild로 아바타 깜빡임 방지
+      if (_profiles.length == cached.length &&
+          _profiles.asMap().entries.every((e) =>
+              (e.value['user_id'] as String?) == (cached[e.key]['user_id'] as String?))) {
+        return;
+      }
       setState(() {
         _profiles = cached;
         _isLoading = false;
@@ -69,22 +75,21 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
 
   ImageProvider? _avatarProvider(String? path) {
     if (path == null || path.isEmpty) return null;
+    final cacheKey = path.length > 200 ? path.hashCode.toString() : path;
+    if (_avatarCache.containsKey(cacheKey)) return _avatarCache[cacheKey];
+    ImageProvider? provider;
     if (path.startsWith('data:image')) {
       try {
         final b64 = path.split(',').last;
-        return MemoryImage(base64Decode(b64));
+        provider = MemoryImage(base64Decode(b64));
       } catch (_) {
-        return null;
+        provider = null;
       }
+    } else if (path.startsWith('http://') || path.startsWith('https://')) {
+      provider = NetworkImage(path);
     }
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return NetworkImage(path);
-    }
-    if (!kIsWeb) {
-      // Avoid importing dart:io here; keep it simple.
-      return null;
-    }
-    return null;
+    if (provider != null) _avatarCache[cacheKey] = provider;
+    return provider;
   }
 
   Future<void> _removeFavorite(String otherUserId) async {
@@ -122,20 +127,15 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
     );
     if (ok != true) return;
 
-    // Optimistic UI/cache update: remove immediately.
+    // Optimistic UI only: 로컬 _profiles만 갱신. 캐시는 API 성공 후 갱신해 리스너 이중 setState로 인한 깜빡임 방지.
     final removed = target;
+    final filtered = _profiles.where((p) => (p['user_id'] as String?) != otherUserId).toList();
 
     setState(() {
       _removing.add(otherUserId);
-      _profiles = _profiles.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+      _profiles = filtered;
       _isLoading = false;
     });
-
-    final cached = SupabaseService.favoriteTrainersCache.value;
-    if (cached != null) {
-      SupabaseService.favoriteTrainersCache.value =
-          cached.where((p) => (p['user_id'] as String?) != otherUserId).toList();
-    }
 
     // DB delete in background
     () async {
@@ -144,19 +144,20 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
           currentUserId: user.id,
           swipedUserId: otherUserId,
         );
-
-        // Minimal DB touching: only verify if needed (throttled).
+        // API 성공 후 캐시만 동기화 (리스너는 같은 목록이면 setState 생략하므로 깜빡임 없음).
+        final cached = SupabaseService.favoriteTrainersCache.value;
+        if (cached != null) {
+          SupabaseService.favoriteTrainersCache.value =
+              cached.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+        }
         Future.microtask(() => SupabaseService.refreshBootstrapCachesIfChanged(user.id));
       } catch (e) {
-        // If DB delete failed, re-sync from DB (may restore the item).
+        // 실패 시 DB에서 다시 불러와서 복구
         await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);
-
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to remove: $e')),
         );
-
-        // If cache couldn't restore (e.g. offline), at least re-add locally.
         if (removed.isNotEmpty) {
           final nowCached = SupabaseService.favoriteTrainersCache.value;
           if (nowCached == null || !nowCached.any((p) => (p['user_id'] as String?) == otherUserId)) {
@@ -166,9 +167,8 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
           }
         }
       } finally {
-        if (mounted) {
-          setState(() => _removing.remove(otherUserId));
-        }
+        if (mounted) _removing.remove(otherUserId);
+        // setState 없이 _removing만 정리 (이미 리스트에서 제거됐으므로 한 번만 rebuild 유지)
       }
     }();
   }
@@ -198,6 +198,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
                         final otherUserId = (p['user_id'] as String?) ?? '';
                         final avatar = _avatarProvider(p['main_photo_path'] as String?);
                         return ListTile(
+                          key: ValueKey(otherUserId),
                           leading: CircleAvatar(
                             backgroundImage: avatar,
                             child: avatar == null ? const Icon(Icons.person) : null,

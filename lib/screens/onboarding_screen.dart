@@ -34,7 +34,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isSaving = false;
 
   // Immutable (after initial onboarding)
-  String _userType = 'student'; // tutor | student | stutor (dummy: student only)
+  String _userType = 'student'; // tutor | student | twiner (dummy: user can choose Tutor or Student)
   String _gender = 'Prefer not to say';
   DateTime? _birthdateLocal;
   final _nameController = TextEditingController();
@@ -72,7 +72,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   bool get _isEdit => widget.existingProfile != null;
   bool get _isDummy => !_isEdit && _isAnonymousSession();
-  bool get _isTutor => _userType == 'tutor' || _userType == 'stutor';
+  bool get _isTutor => _userType == 'tutor' || _userType == 'twiner';
+
+  /// Tutor→Twiner 전환: goals만 추가, Lesson info 스킵. Save 전까지 DB에 user_type 저장 안 함.
+  bool get _isTwinerFromTutor {
+    if (!_isEdit || _userType != 'twiner') return false;
+    final existing = widget.existingProfile;
+    if (existing == null) return false;
+    final initType = (widget.initialUserType ?? '').trim().toLowerCase();
+    final existingType = (existing['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    return initType == 'twiner' && existingType == 'tutor';
+  }
+
+  /// Student→Twiner 전환: talents + Lesson info 추가. Save 전까지 DB에 user_type 저장 안 함.
+  bool get _isTwinerFromStudent {
+    if (!_isEdit || _userType != 'twiner') return false;
+    final existing = widget.existingProfile;
+    if (existing == null) return false;
+    final initType = (widget.initialUserType ?? '').trim().toLowerCase();
+    final existingType = (existing['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    return initType == 'twiner' && existingType == 'student';
+  }
+
+  /// Twiner 전환 플로우 전체 (Tutor→Twiner 또는 Student→Twiner)
+  bool get _isTwinerConversion => _isTwinerFromTutor || _isTwinerFromStudent;
 
   static const String _tutorWaiverTitle = 'Tutor Agreement & Liability Waiver';
   static const String _tutorWaiverText = '''
@@ -112,14 +135,18 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     super.initState();
 
     final initType = (widget.initialUserType ?? '').trim().toLowerCase();
-    if (initType == 'tutor' || initType == 'student' || initType == 'stutor') {
+    if (initType == 'tutor' || initType == 'student' || initType == 'twiner') {
       _userType = initType;
     }
 
     final existing = widget.existingProfile;
     if (existing != null) {
       final t = (existing['user_type'] as String?)?.trim().toLowerCase();
-      if (t == 'tutor' || t == 'student' || t == 'stutor') _userType = t!;
+      if (t == 'tutor' || t == 'student' || t == 'twiner') {
+        // Twiner 전환 플로우: initialUserType twiner이고 기존이 tutor/student면 UI는 twiner 유지(Save 시에만 DB 반영)
+        if (initType == 'twiner' && (t == 'tutor' || t == 'student')) _userType = 'twiner';
+        else _userType = t!;
+      }
       _nameController.text = (existing['name'] as String?) ?? '';
       _gender = (existing['gender'] as String?) ?? _gender;
 
@@ -136,9 +163,33 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         }
       }
 
-      final talents =
-          (existing['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList();
-      if (talents != null) _talentsOrGoals = talents;
+      // Student: goals; Tutor: talents; Twiner: talents. Student→Twiner 전환 시 talents용(비어 있음), Tutor→Twiner 시 goals용
+      final userType = (existing['user_type'] as String?)?.trim().toLowerCase() ?? '';
+      if (userType == 'student') {
+        if (initType == 'twiner') {
+          // Student→Twiner: "What can you teach?"(talents) 입력. 학생은 talents 없음
+          _talentsOrGoals = (existing['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+        } else {
+          final goals = (existing['goals'] as List<dynamic>?) ?? (existing['talents'] as List<dynamic>?);
+          if (goals != null) _talentsOrGoals = goals.map((e) => e.toString()).toList();
+        }
+      } else if (userType == 'twiner') {
+        final talents = existing['talents'] as List<dynamic>?;
+        final goals = existing['goals'] as List<dynamic>?;
+        final addingStudentSide = (talents != null && talents.isNotEmpty) && (goals == null || goals.isEmpty);
+        if (addingStudentSide) {
+          if (goals != null && goals.isNotEmpty) _talentsOrGoals = goals.map((e) => e.toString()).toList();
+        } else {
+          if (talents != null) _talentsOrGoals = talents.map((e) => e.toString()).toList();
+        }
+      } else if (userType == 'tutor' && initType == 'twiner') {
+        // Tutor→Twiner 전환: "What do you want to learn?"(goals)만 입력. 기존 goals 있으면 로드
+        final goals = (existing['goals'] as List<dynamic>?)?.map((e) => e.toString()).toList();
+        if (goals != null) _talentsOrGoals = goals;
+      } else {
+        final talents = (existing['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList();
+        if (talents != null) _talentsOrGoals = talents;
+      }
 
       final methods =
           (existing['teaching_methods'] as List<dynamic>?)?.map((e) => e.toString()).toList();
@@ -201,7 +252,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         // Ensure dummy has GPS (try device first, then fallback).
         await _ensureDummyHasLocation();
         if (!mounted) return;
-        // Dummy profiles: student only (initial and on regenerate).
+        // Dummy profiles: prefill with current role (default student); user can switch Tutor/Student and regenerate.
         _prefillDummyOnboardingData(regenerate: false);
       }
     });
@@ -345,8 +396,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     if (_dummyDataPrefilled && !regenerate) return;
     _dummyDataPrefilled = true;
 
-    // Dummy flow: always student. Otherwise use current role or force student on regenerate.
-    final pickedUserType = _isDummy ? 'student' : (regenerate ? 'student' : _userType);
+    // Dummy: use current _userType (Tutor or Student). Non-dummy regenerate: force student.
+    final pickedUserType = _isDummy ? _userType : (regenerate ? 'student' : _userType);
 
     const firstNames = <String>[
       'John','Michael','David','James','Robert','William','Christopher','Daniel','Matthew','Joshua',
@@ -399,7 +450,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       _birthdateLocal = birth;
       _talentsOrGoals = picked;
       _aboutMeController.text = about;
-      if (_userType == 'tutor' || _userType == 'stutor') {
+      if (_userType == 'tutor' || _userType == 'twiner') {
         _lessonLocations
           ..clear()
           ..add('online')
@@ -409,7 +460,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         _lessonLocations.clear();
         _aboutLessonController.text = '';
       }
-      if (_userType == 'tutor' || _userType == 'stutor') {
+      if (_userType == 'tutor' || _userType == 'twiner') {
         _rateController.text = (20 + _dummyRng.nextInt(81)).toString(); // 20..100
         _parentParticipationWelcomed = _dummyRng.nextBool();
       } else {
@@ -518,15 +569,21 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
   List<_OnboardingStepKey> _stepKeys({String? userTypeOverride}) {
     final type = (userTypeOverride ?? _userType).trim().toLowerCase();
-    final isTutor = type == 'tutor' || type == 'stutor';
+    final isTutor = type == 'tutor' || type == 'twiner';
+    // Tutor→Twiner 전환 시에만 Lesson info 스킵. Student→Twiner는 Lesson info 포함
+    final includeLessonInfo = isTutor && !_isTwinerFromTutor;
     return <_OnboardingStepKey>[
       _OnboardingStepKey.basic,
       _OnboardingStepKey.topics,
-      if (isTutor) _OnboardingStepKey.lessonInfo,
+      if (includeLessonInfo) _OnboardingStepKey.lessonInfo,
       _OnboardingStepKey.photos,
-      if (!_isEdit) _OnboardingStepKey.waivers,
+      if (!_isEdit || _isTwinerConversion) _OnboardingStepKey.waivers,
     ];
   }
+
+  /// Waivers 단계에서 표시할 역할: Student→Twiner는 Tutor waiver, Tutor→Twiner는 Student waiver
+  bool get _showTutorWaiverInStep =>
+      _isTwinerFromStudent ? true : (_isTwinerFromTutor ? false : _isTutor);
 
   bool _validateStepKey(_OnboardingStepKey key) {
     switch (key) {
@@ -568,9 +625,9 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         }
         return true;
       case _OnboardingStepKey.waivers:
-        if (_isEdit) return true;
+        if (_isEdit && !_isTwinerConversion) return true;
         if (!_agreeRoleWaiver) {
-          _snack(_isTutor ? 'Please agree to the Tutor waiver.' : 'Please agree to the Student waiver.');
+          _snack(_showTutorWaiverInStep ? 'Please agree to the Tutor waiver.' : 'Please agree to the Student waiver.');
           return false;
         }
         if (_requiresParentalConsent && !_agreeParentalConsent) {
@@ -608,14 +665,19 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     setState(() => _isSaving = true);
     try {
       final existing = widget.existingProfile;
-      final fixedUserType = (_isEdit ? (existing?['user_type'] as String?) : _userType) ?? _userType;
-      final isTutorProfile = fixedUserType.trim().toLowerCase() == 'tutor' || fixedUserType.trim().toLowerCase() == 'stutor';
+      // Twiner 전환 플로우에서 Save 시에만 user_type을 twiner로 DB에 저장
+      final fixedUserType = _isTwinerConversion
+          ? 'twiner'
+          : ((_isEdit ? (existing?['user_type'] as String?) : _userType) ?? _userType);
+      final isTutorProfile = fixedUserType.trim().toLowerCase() == 'tutor' || fixedUserType.trim().toLowerCase() == 'twiner';
       final fixedName = _isEdit ? (existing?['name'] as String?) : _nameController.text.trim();
       final fixedGender = _isEdit ? (existing?['gender'] as String?) : _gender;
 
       final birth = _birthdateLocal;
       final age = _computedAge();
 
+      // Student: "What do you want to learn?" → goals; Tutor/Twiner: "What can you teach?" → talents
+      final isStudentProfile = fixedUserType.trim().toLowerCase() == 'student';
       final payload = <String, dynamic>{
         'user_id': user.id,
         'user_type': fixedUserType,
@@ -624,7 +686,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         'age': age,
         'latitude': _latitude,
         'longitude': _longitude,
-        'talents': _talentsOrGoals,
+        'talents': isTutorProfile ? _talentsOrGoals : <String>[],
         // Tutor only: lesson info. Students should not keep these fields.
         'teaching_methods': isTutorProfile ? _lessonLocations.toList() : <String>[],
         'about_me': _aboutMeController.text.trim().isEmpty ? null : _aboutMeController.text.trim(),
@@ -640,6 +702,28 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         'certificate_photos': _certificatePhotos.isNotEmpty ? _certificatePhotos : null,
         'updated_at': TimeUtils.nowUtcIso(),
       };
+
+      if (isStudentProfile) payload['goals'] = _talentsOrGoals;
+
+      // Tutor→Twiner 전환: goals만 새로 넣고, talents·Lesson info는 기존 값 유지
+      if (_isTwinerFromTutor && existing != null) {
+        payload['talents'] = existing['talents'] ?? <dynamic>[];
+        payload['goals'] = _talentsOrGoals;
+        payload['teaching_methods'] = existing['teaching_methods'] ?? <dynamic>[];
+        payload['experience_description'] = existing['experience_description'];
+        payload['parent_participation_welcomed'] = existing['parent_participation_welcomed'] ?? false;
+        payload['tutoring_rate'] = existing['tutoring_rate'];
+      }
+
+      // Student→Twiner 전환: talents + Lesson info 새로 넣고, goals는 기존 값 유지
+      if (_isTwinerFromStudent && existing != null) {
+        payload['talents'] = _talentsOrGoals;
+        payload['goals'] = existing['goals'] ?? <dynamic>[];
+        payload['teaching_methods'] = _lessonLocations.toList();
+        payload['experience_description'] = _aboutLessonController.text.trim().isEmpty ? null : _aboutLessonController.text.trim();
+        payload['parent_participation_welcomed'] = _parentParticipationWelcomed;
+        payload['tutoring_rate'] = _rateController.text.trim().isEmpty ? null : _rateController.text.trim();
+      }
 
       // Optional: if DB has birthdate column, store it.
       if (!_isEdit && birth != null) {
@@ -668,25 +752,35 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         );
       }
 
-      // Agreements (only for onboarding)
-      if (!_isEdit) {
-        // Role-specific waiver
+      // Agreements: 신규 온보딩 또는 Twiner 전환 시 해당 waiver 저장
+      if (!_isEdit || _isTwinerConversion) {
+        // Student→Twiner: Tutor waiver; Tutor→Twiner: Student waiver; 그 외: 역할별 waiver
+        final agreementType = _isTwinerFromStudent
+            ? 'trainer_terms'
+            : (_isTwinerFromTutor ? 'trainee_waiver' : (_isTutor ? 'trainer_terms' : 'trainee_waiver'));
         await SupabaseService.saveUserAgreement(
-          agreementType: _isTutor ? 'trainer_terms' : 'trainee_waiver',
+          agreementType: agreementType,
           version: 'v1.0',
         );
-        // Parental consent only when applicable (minor)
-        if (_requiresParentalConsent) {
-          await SupabaseService.saveUserAgreement(
-            agreementType: 'parental_consent',
-            version: 'v1.0',
-          );
+        if (!_isEdit) {
+          if (_requiresParentalConsent) {
+            await SupabaseService.saveUserAgreement(
+              agreementType: 'parental_consent',
+              version: 'v1.0',
+            );
+          }
         }
       }
 
       if (!mounted) return;
+      final savedAsTwiner = fixedUserType.trim().toLowerCase() == 'twiner';
       if (_isEdit) {
-        Navigator.of(context).pop(true);
+        // Twiner 저장 후에는 메인 화면으로 전환
+        if (savedAsTwiner) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          Navigator.of(context).pop(true);
+        }
       } else {
         Navigator.of(context).pushReplacementNamed('/home');
       }
@@ -821,7 +915,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                       ButtonSegment(value: 'student', label: Text('Student')),
                     ],
                     selected: {_userType},
-                    onSelectionChanged: (_isDummy || _isEdit)
+                    onSelectionChanged: _isEdit
                         ? null
                         : (s) {
                             final nextType = s.first;
@@ -837,6 +931,10 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                               final last = _stepKeys(userTypeOverride: _userType).length - 1;
                               _step = _step.clamp(0, last);
                             });
+                            // Dummy: regenerate prefilled data for the new role.
+                            if (_isDummy) {
+                              _prefillDummyOnboardingData(regenerate: true);
+                            }
                           },
                   ),
                   const SizedBox(height: 12),
@@ -919,9 +1017,12 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
           break;
 
         case _OnboardingStepKey.topics:
+          final topicsLabel = _isTwinerFromTutor
+              ? 'What do you want to learn?'
+              : (_isTwinerFromStudent ? 'What can you teach?' : (_isTutor ? 'What can you teach?' : 'What do you want to learn?'));
           steps.add(
             Step(
-              title: Text(_isTutor ? 'What can you teach?' : 'What do you want to learn?'),
+              title: Text(topicsLabel),
               isActive: isActive,
               state: state,
               content: Column(
@@ -930,7 +1031,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   CategorySelectorWidget(
                     selectedItems: _talentsOrGoals,
                     onSelectionChanged: (v) => setState(() => _talentsOrGoals = v),
-                    title: _isTutor ? 'What can you teach?' : 'What do you want to learn?',
+                    title: topicsLabel,
                     hint: 'Select 1–6.',
                   ),
                 ],
@@ -961,20 +1062,57 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   _sectionTitle('Lesson Location (required)'),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
                       FilterChip(
-                        label: const Text('Onsite'),
+                        label: Text(
+                          'Onsite',
+                          style: TextStyle(
+                            color: _lessonLocations.contains('onsite')
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Theme.of(context).colorScheme.onSurface,
+                            fontWeight: _lessonLocations.contains('onsite')
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
+                        ),
                         selected: _lessonLocations.contains('onsite'),
                         onSelected: (v) => setState(() {
                           v ? _lessonLocations.add('onsite') : _lessonLocations.remove('onsite');
                         }),
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        selectedColor: Theme.of(context).colorScheme.primary,
+                        checkmarkColor: Theme.of(context).colorScheme.onPrimary,
+                        side: BorderSide(
+                          color: _lessonLocations.contains('onsite')
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                        ),
                       ),
                       FilterChip(
-                        label: const Text('Online'),
+                        label: Text(
+                          'Online',
+                          style: TextStyle(
+                            color: _lessonLocations.contains('online')
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Theme.of(context).colorScheme.onSurface,
+                            fontWeight: _lessonLocations.contains('online')
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
+                        ),
                         selected: _lessonLocations.contains('online'),
                         onSelected: (v) => setState(() {
                           v ? _lessonLocations.add('online') : _lessonLocations.remove('online');
                         }),
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        selectedColor: Theme.of(context).colorScheme.primary,
+                        checkmarkColor: Theme.of(context).colorScheme.onPrimary,
+                        side: BorderSide(
+                          color: _lessonLocations.contains('online')
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                        ),
                       ),
                     ],
                   ),
@@ -1070,7 +1208,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _isTutor ? _tutorWaiverTitle : _studentWaiverTitle,
+                    _showTutorWaiverInStep ? _tutorWaiverTitle : _studentWaiverTitle,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 10),
@@ -1083,7 +1221,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     ),
                     child: SingleChildScrollView(
                       child: SelectableText(
-                        _isTutor ? _tutorWaiverText : _studentWaiverText,
+                        _showTutorWaiverInStep ? _tutorWaiverText : _studentWaiverText,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
                       ),
                     ),
@@ -1093,7 +1231,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     value: _agreeRoleWaiver,
                     onChanged: (v) => setState(() => _agreeRoleWaiver = v ?? false),
                     title: Text(
-                      _isTutor
+                      _showTutorWaiverInStep
                           ? 'I have read and agree to the Tutor Agreement & Liability Waiver'
                           : 'I have read and agree to the Student Assumption of Risk & Waiver',
                     ),
@@ -1157,7 +1295,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Profile' : 'Onboarding'),
+        title: Text(_isTwinerConversion ? 'Adding more info' : (_isEdit ? 'Edit Profile' : 'Onboarding')),
       ),
       body: SafeArea(
         child: Stepper(

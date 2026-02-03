@@ -1,7 +1,10 @@
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_navigation.dart' show navigatorKey;
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -10,8 +13,6 @@ import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'theme/app_theme.dart';
-
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,24 @@ Future<void> main() async {
     url: 'https://oibboowecbxvjmookwtd.supabase.co',
     anonKey: 'sb_publishable_SYXxaO7zPzUsgarNzSqCgA_pdhR9ZIj',
   );
+
+  // 모바일 콜드 스타트: 딥링크로 앱이 켜졌을 때 초기 URI에서 세션 복구 시도
+  if (!kIsWeb) {
+    try {
+      final appLinks = AppLinks();
+      final uri = await appLinks.getInitialLink();
+      if (uri != null &&
+          uri.host == 'login-callback' &&
+          (uri.queryParameters.containsKey('code') ||
+              uri.queryParameters.containsKey('error'))) {
+        await Supabase.instance.client.auth.getSessionFromUrl(uri);
+        debugPrint('Supabase: initial URI session exchange succeeded');
+      }
+    } catch (e, st) {
+      debugPrint('Supabase: initial URI session exchange failed: $e');
+      debugPrint('Stack: $st');
+    }
+  }
 
   // Notification service (used by chat/calendar flows)
   await NotificationService().initialize();
@@ -87,12 +106,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
 
-    // Auth change listener
+    // Auth change listener (navigatorKey 사용: 로그아웃 후 /login으로 가면 AuthWrapper가 dispose되므로 context 대신 사용)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final event = data.event;
       final session = data.session;
+      debugPrint('Auth event: $event, hasSession: ${session != null}');
 
       if (event == AuthChangeEvent.signedIn && session != null) {
+        debugPrint('Auth: signed in, redirecting to app');
         if (!mounted) return;
         setState(() => _showSplash = false);
         _checkAuthStatus();
@@ -100,7 +121,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (!mounted) return;
         setState(() => _showSplash = false);
         SupabaseService.clearInMemoryCaches();
-        Navigator.of(context).pushReplacementNamed('/login');
+        navigatorKey.currentState?.pushReplacementNamed('/login');
       }
     });
 
@@ -118,7 +139,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (user == null) {
         if (!mounted) return;
         setState(() => _showSplash = false);
-        Navigator.of(context).pushReplacementNamed('/login');
+        navigatorKey.currentState?.pushReplacementNamed('/login');
         return;
       }
 
@@ -132,14 +153,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       setState(() => _showSplash = false);
 
       if (profile == null) {
-        Navigator.of(context).pushReplacementNamed('/onboarding');
+        navigatorKey.currentState?.pushReplacementNamed('/onboarding');
       } else {
-        Navigator.of(context).pushReplacementNamed('/home');
+        navigatorKey.currentState?.pushReplacementNamed('/home');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _showSplash = false);
-      Navigator.of(context).pushReplacementNamed('/login');
+      navigatorKey.currentState?.pushReplacementNamed('/login');
     } finally {
       _isChecking = false;
     }

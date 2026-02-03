@@ -392,7 +392,7 @@ class ProfileDetailScreen extends StatelessWidget {
 
   Widget _buildPhotoSlider(BuildContext context, List<String> photos) {
     final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
-    final isTutorOrStutor = userType == 'tutor' || userType == 'stutor';
+    final isTutorOrTwiner = userType == 'tutor' || userType == 'twiner';
 
     if (photos.isEmpty) {
       return Container(
@@ -408,7 +408,7 @@ class ProfileDetailScreen extends StatelessWidget {
               ),
             ),
             // Tutor/Stutor인 경우에만 공유 버튼 표시
-            if (isTutorOrStutor)
+            if (isTutorOrTwiner)
               Positioned(
                 top: 8,
                 right: 8,
@@ -425,7 +425,7 @@ class ProfileDetailScreen extends StatelessWidget {
         children: [
           _buildProfileImage(context, photos[0]),
           // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-          if (isTutorOrStutor)
+          if (isTutorOrTwiner)
             Positioned(
               top: 8,
               right: 8,
@@ -443,7 +443,7 @@ class ProfileDetailScreen extends StatelessWidget {
           buildImage: (imagePath) => _buildProfileImage(context, imagePath),
         ),
         // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-        if (isTutorOrStutor)
+        if (isTutorOrTwiner)
           Positioned(
             top: 8,
             right: 8,
@@ -575,23 +575,23 @@ class ProfileDetailScreen extends StatelessWidget {
     final certificatePhotos = profile['certificate_photos'] as List<dynamic>?;
     final aboutMe = (profile['about_me'] as String?)?.trim();
 
-    // Student/Stutor: goals (student는 talents에 저장, stutor는 goals 또는 talents)
-    final traineeGoals = (userType == 'student' || userType == 'stutor')
-        ? (profile['talents'] as List<dynamic>?) ?? (profile['goals'] as List<dynamic>?)
+    // Student: goals; Twiner: goals or talents
+    final traineeGoals = (userType == 'student' || userType == 'twiner')
+        ? (profile['goals'] as List<dynamic>?) ?? (profile['talents'] as List<dynamic>?)
         : null;
     final mainPhotoPath = profile['main_photo_path'] as String?;
     final profilePhotos = profile['profile_photos'] as List<dynamic>?;
     
-    // 현재 사용자의 goals 또는 talents 가져오기
+    // 현재 사용자의 goals (student/twiner) 가져오기
     final currentUserType = (currentUserProfile?['user_type'] as String?)?.trim().toLowerCase();
-    final List<String> currentUserGoals = (currentUserType == 'student' || currentUserType == 'stutor')
-        ? ((currentUserProfile?['talents'] as List<dynamic>?) ??
-                (currentUserProfile?['goals'] as List<dynamic>?) ??
+    final List<String> currentUserGoals = (currentUserType == 'student' || currentUserType == 'twiner')
+        ? ((currentUserProfile?['goals'] as List<dynamic>?) ??
+                (currentUserProfile?['talents'] as List<dynamic>?) ??
                 const <dynamic>[])
             .map((e) => e.toString())
             .toList()
         : const <String>[];
-    final List<String> currentUserTalents = (currentUserType == 'tutor' || currentUserType == 'stutor')
+    final List<String> currentUserTalents = (currentUserType == 'tutor' || currentUserType == 'twiner')
         ? (currentUserProfile?['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
             const <String>[]
         : const <String>[];
@@ -620,7 +620,7 @@ class ProfileDetailScreen extends StatelessWidget {
         _distanceMetersToProfile(profile, effectiveCurrentUserProfile);
     final distanceLabel = distanceMeters == null ? null : _formatDistance(distanceMeters);
 
-    // My Profile이 아닐 때 AppBar에 이름, 나이대, 성별 표시 (tutor/stutor/student 모두)
+    // My Profile이 아닐 때 AppBar에 이름, 나이대, 성별 표시 (tutor/twiner/student 모두)
     final shouldShowCustomAppBar = !hideAppBar && !isMyProfile;
     
     // AppBar 제목 생성
@@ -669,7 +669,7 @@ class ProfileDetailScreen extends StatelessWidget {
     final sectionSpacing = compactLayout ? 14.0 : 24.0;
     final buttonVerticalPadding = compactLayout ? 12.0 : 16.0;
     // Tudent의 "I want to learn"용 goals (DB goals 컬럼)
-    final stutorGoals = userType == 'stutor' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
+    final twinerGoals = userType == 'twiner' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
 
     return Scaffold(
       appBar: hideAppBar ? null : AppBar(
@@ -701,7 +701,7 @@ class ProfileDetailScreen extends StatelessWidget {
             ),
 
             // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor') && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 10.0 : 16.0),
                 child: SizedBox(
@@ -716,7 +716,7 @@ class ProfileDetailScreen extends StatelessWidget {
               ),
             
             // Chat history 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor') && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 4.0 : 0.0),
                 child: SizedBox(
@@ -742,8 +742,8 @@ class ProfileDetailScreen extends StatelessWidget {
                 ),
               ),
 
-            // Distance (privacy-friendly) just below photo (tutor/stutor/student, My Favorite 등)
-            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor' || userType == 'student') && isSignedIn && distanceLabel != null)
+            // Distance (privacy-friendly) just below photo (tutor/twiner/student, My Favorite 등)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner' || userType == 'student') && isSignedIn && distanceLabel != null)
               Padding(
                 padding: EdgeInsets.fromLTRB(compactLayout ? 16 : 20, compactLayout ? 6 : 10, compactLayout ? 16 : 20, 0),
                 child: Center(
@@ -841,7 +841,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Tutor/Stutor: About the lesson (About me 다음)
-                  if ((userType == 'tutor' || userType == 'stutor') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
+                  if ((userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
                     Text(
                       'About the lesson',
                       style: TextStyle(
@@ -861,7 +861,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Tutor/Tudent: I can teach (talents)
-                  if ((userType == 'tutor' || userType == 'stutor') && talents != null && talents.isNotEmpty) ...[
+                  if ((userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
                     Text(
                       'I can teach',
                       style: TextStyle(
@@ -877,7 +877,7 @@ class ProfileDetailScreen extends StatelessWidget {
                           .map((talent) {
                             final talentStr = talent.toString();
                             final matchingNorm =
-                                (currentUserType == 'tutor' || currentUserType == 'stutor') && (userType == 'tutor' || userType == 'stutor')
+                                (currentUserType == 'tutor' || currentUserType == 'twiner') && (userType == 'tutor' || userType == 'twiner')
                                     ? currentUserTalentsNorm
                                     : currentUserGoalsNorm;
                             final isMatched = matchingNorm.contains(_norm(talentStr));
@@ -893,7 +893,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Stutor 전용: I want to learn (goals 컬럼)
-                  if (userType == 'stutor' && stutorGoals != null && stutorGoals.isNotEmpty) ...[
+                  if (userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
                       style: TextStyle(
@@ -905,10 +905,10 @@ class ProfileDetailScreen extends StatelessWidget {
                     Wrap(
                       spacing: 8,
                       runSpacing: compactLayout ? 6 : 8,
-                      children: stutorGoals
+                      children: twinerGoals
                           .map((goal) {
                             final goalStr = goal.toString();
-                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'stutor')
+                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
                                 ? currentUserTalentsNorm.contains(_norm(goalStr))
                                 : currentUserGoalsNorm.contains(_norm(goalStr));
                             return _buildProfileChip(context, goalStr, highlighted: isMatched);
@@ -919,7 +919,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Lesson location (Trainer only)
-                  if ((userType == 'tutor' || userType == 'stutor') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
+                  if ((userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
                     Text(
                       'Lesson location',
                       style: TextStyle(
@@ -942,7 +942,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
 
                   // Trainer 전용: Tutoring rate / Parent participation
-                  if (userType == 'tutor' || userType == 'stutor') ...[
+                  if (userType == 'tutor' || userType == 'twiner') ...[
                     if (tutoringRate != null && tutoringRate.isNotEmpty) ...[
                       Row(
                         children: [
@@ -987,7 +987,7 @@ class ProfileDetailScreen extends StatelessWidget {
                     ],
                   ],
                   
-                  // Student 전용: I want to learn (talents 컬럼에 goals 저장)
+                  // Student 전용: I want to learn (goals 컬럼)
                   if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
@@ -1003,7 +1003,7 @@ class ProfileDetailScreen extends StatelessWidget {
                       children: traineeGoals
                           .map((goal) {
                             final goalStr = goal.toString();
-                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'stutor')
+                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
                                 ? currentUserTalentsNorm.contains(_norm(goalStr))
                                 : currentUserGoalsNorm.contains(_norm(goalStr));
                             return _buildProfileChip(context, goalStr, highlighted: isMatched);
@@ -1014,7 +1014,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Certificates (Trainer만)
-                  if ((userType == 'tutor' || userType == 'stutor') && certificatePhotos != null && certificatePhotos.isNotEmpty) ...[
+                  if ((userType == 'tutor' || userType == 'twiner') && certificatePhotos != null && certificatePhotos.isNotEmpty) ...[
                     Text(
                       'Certificates / Awards / Degrees',
                       style: TextStyle(

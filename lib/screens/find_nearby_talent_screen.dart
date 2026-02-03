@@ -8,7 +8,7 @@ import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
 
-/// Section mode for nearby discovery: tutors (Student/Stutor), other tutors (Tutor/Stutor), or student candidates (Tutor/Stutor).
+/// Section mode for nearby discovery: tutors (Student/Twiner), other tutors (Tutor/Twiner), or student candidates (Tutor/Twiner).
 enum FindNearbySection {
   meetTutors,
   otherTrainers,

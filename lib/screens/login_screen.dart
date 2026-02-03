@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../app_navigation.dart' show navigatorKey;
+import '../services/supabase_service.dart';
 import '../widgets/twingl_wordmark.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,6 +18,48 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _loadingProvider;
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // 로그아웃 후 재로그인: AuthWrapper가 스택에서 제거된 상태에서 세션 생기면
+    // 여기서 로딩을 끄고 홈으로 보냄 (AuthWrapper 리스너는 이미 dispose됨)
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+      (data) {
+        if (data.event != AuthChangeEvent.signedIn || data.session == null) return;
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _loadingProvider = null;
+        });
+        _navigateAfterSignIn(data.session!.user.id);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _navigateAfterSignIn(String userId) async {
+    try {
+      await SupabaseService.hydrateCachesFromDisk(userId);
+      final profile = await SupabaseService.getCurrentUserProfileCached(userId);
+      if (!mounted) return;
+      if (profile == null) {
+        navigatorKey.currentState?.pushReplacementNamed('/onboarding');
+      } else {
+        navigatorKey.currentState?.pushReplacementNamed('/home');
+      }
+    } catch (e) {
+      if (mounted) {
+        navigatorKey.currentState?.pushReplacementNamed('/');
+      }
+    }
+  }
 
   Future<void> _signInAnonymouslyAndGoOnboarding() async {
     if (_isLoading) return;
@@ -70,26 +116,41 @@ class _LoginScreenState extends State<LoginScreen> {
         provider,
         redirectTo: redirectTo,
         authScreenLaunchMode: launchMode,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException(
+            'Opening login window timed out. Check your network.',
+          );
+        },
       );
 
       if (response == false) {
         throw Exception('Social login cancelled');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isLoading = false;
         _loadingProvider = null;
       });
 
       if (mounted) {
+        final isTimeout = e is TimeoutException;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: $e'),
-            duration: const Duration(seconds: 3),
+            content: Text(
+              isTimeout
+                  ? '네트워크가 지연되고 있습니다. 잠시 후 다시 시도해 주세요.'
+                  : 'Login failed: $e',
+            ),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
+      // 상세 로그 (디버깅용)
       print('Social login error: $e');
+      print('Error type: ${e.runtimeType}');
+      print('Stack: $stackTrace');
     }
   }
 

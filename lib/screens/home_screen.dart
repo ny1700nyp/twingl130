@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
+import '../widgets/spark_card.dart';
 import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
@@ -352,51 +353,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (context, snap) {
                       final q = snap.data;
                       if (q == null) return const SizedBox.shrink();
-                      return Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '“${q.quote}”',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontStyle: FontStyle.italic,
-                                    height: 1.35,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '— ${q.author}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: Theme.of(context).colorScheme.onSurface.withAlpha(170),
-                                    ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
+                      return SparkCard(quote: q.quote, author: q.author);
                     },
                   ),
                 ),
 
-              // Home actions by user type: Student / Tutor / Stutor
+              // Home actions by user type: Student / Tutor / Twiner
               ValueListenableBuilder<Map<String, dynamic>?>(
                 valueListenable: SupabaseService.currentUserProfileCache,
                 builder: (context, profile, _) {
                   final userType = (profile?['user_type'] as String?)?.trim().toLowerCase() ?? '';
                   final isStudent = userType == 'student';
                   final isTutor = userType == 'tutor';
-                  final isStutor = userType == 'stutor';
+                  final isTwiner = userType == 'twiner';
 
                   final actions = <Widget>[];
-                  if (isStudent || isStutor) {
+                  if (isStudent || isTwiner) {
                     actions.addAll([
                       _homeActionRow(
                         icon: Icons.search,
@@ -411,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ]);
                   }
-                  if (isTutor || isStutor) {
+                  if (isTutor || isTwiner) {
                     if (actions.isNotEmpty) actions.add(const SizedBox(height: 10));
                     actions.addAll([
                       _homeActionRow(

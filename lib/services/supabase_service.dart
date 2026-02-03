@@ -157,6 +157,23 @@ class SupabaseService {
     _avatarRehydrateAttemptedUserIds.clear();
   }
 
+  /// Delete the current user's account (Supabase Auth). Calls Edge Function delete-user with
+  /// the user's JWT; the function uses service role to delete the user. Works for email and
+  /// Google (and other OAuth) sign-in. Requires the delete-user Edge Function to be deployed.
+  static Future<void> deleteCurrentUserAccount() async {
+    final session = supabase.auth.currentSession;
+    if (session == null) throw Exception('Not signed in');
+    final token = session.accessToken;
+    final response = await supabase.functions.invoke(
+      'delete-user',
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.status != 200) {
+      final msg = response.data is Map ? (response.data['error'] ?? response.data['msg'] ?? response.data) : response.data;
+      throw Exception(msg ?? 'Account deletion failed (${response.status})');
+    }
+  }
+
   /// Load cached profile/favorites/location/city/chat-conversations from disk into memory.
   static Future<void> hydrateCachesFromDisk(String userId) async {
     if (_diskHydratedUserIds.contains(userId)) return;
@@ -250,12 +267,18 @@ class SupabaseService {
     await _persistCityToDisk(userId, trimmed, (lat: lat, lon: lon));
   }
 
+  /// DB 생성 컬럼(직접 INSERT 불가) — upsert 시 제외
+  static const Set<String> _profileGeneratedColumns = {'geom_geog'};
+
   /// 프로필 생성/업데이트 (온보딩 저장용)
   static Future<void> upsertProfile(Map<String, dynamic> profile) async {
     final user = supabase.auth.currentUser;
     if (user == null) throw Exception('No authenticated user found');
 
     final payload = Map<String, dynamic>.from(profile);
+    for (final key in _profileGeneratedColumns) {
+      payload.remove(key);
+    }
     payload['user_id'] = user.id;
     payload['updated_at'] = TimeUtils.nowUtcIso();
 
@@ -1049,12 +1072,12 @@ class SupabaseService {
     await supabase.from('calendar_events').delete().eq('id', eventId);
   }
 
-  // ----- User type & matching helpers (user_type: tutor | student | stutor) -----
+  // ----- User type & matching helpers (user_type: tutor | student | twiner) -----
 
-  /// Stutor 판단: profile['user_type'] == 'stutor' 이거나, goals·talents 둘 다 있으면 stutor.
-  static bool isStutorProfile(Map<String, dynamic> profile) {
+  /// Twiner 판단: profile['user_type'] == 'twiner' 이거나, goals·talents 둘 다 있으면 twiner.
+  static bool isTwinerProfile(Map<String, dynamic> profile) {
     final type = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
-    if (type == 'stutor') return true;
+    if (type == 'twiner') return true;
     if (type.isNotEmpty) return false;
     final goalsRaw = profile['goals'];
     final talentsRaw = profile['talents'];
@@ -1063,25 +1086,25 @@ class SupabaseService {
     return hasGoals && hasTalents;
   }
 
-  /// Effective user_type: 'tutor' | 'student' | 'stutor'. (구 trainer→tutor, 구 trainee→student 호환)
+  /// Effective user_type: 'tutor' | 'student' | 'twiner'. (구 trainer→tutor, 구 trainee→student 호환)
   static String getEffectiveUserType(Map<String, dynamic> profile) {
     final type = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
-    if (type == 'stutor') return 'stutor';
+    if (type == 'twiner') return 'twiner';
     if (type == 'tutor' || type == 'student') return type;
     if (type == 'trainer') return 'tutor';
     if (type == 'trainee') return 'student';
-    if (isStutorProfile(profile)) return 'stutor';
+    if (isTwinerProfile(profile)) return 'twiner';
     return type.isNotEmpty ? type : 'student';
   }
 
-  /// Goals for matching: Student = talents column (stored as goals); Stutor = goals column.
+  /// Goals for matching: Student = goals column; Twiner = goals column.
   static List<String> getProfileGoals(Map<String, dynamic> profile) {
     final type = getEffectiveUserType(profile);
     if (type == 'student') {
-      final raw = (profile['talents'] as List<dynamic>?) ?? [];
+      final raw = (profile['goals'] as List<dynamic>?) ?? (profile['talents'] as List<dynamic>?) ?? [];
       return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
     }
-    if (type == 'stutor') {
+    if (type == 'twiner') {
       final raw = (profile['goals'] as List<dynamic>?) ?? (profile['talents'] as List<dynamic>?);
       if (raw == null) return [];
       return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
@@ -1089,10 +1112,10 @@ class SupabaseService {
     return [];
   }
 
-  /// Talents for matching: Tutor = talents; Stutor = talents.
+  /// Talents for matching: Tutor = talents; Twiner = talents.
   static List<String> getProfileTalents(Map<String, dynamic> profile) {
     final type = getEffectiveUserType(profile);
-    if (type == 'tutor' || type == 'stutor') {
+    if (type == 'tutor' || type == 'twiner') {
       final raw = (profile['talents'] as List<dynamic>?) ?? [];
       return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
     }
@@ -1105,7 +1128,7 @@ class SupabaseService {
     return targetNorm.intersection(myKeywordsNorm).length;
   }
 
-  /// [Meet Tutors in your area] Student/Stutor: my goals ↔ target talents; target = Tutor + Stutor; ≤30km.
+  /// [Meet Tutors in your area] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; ≤30km.
   static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
     required List<String> myGoals,
     required double currentLatitude,
@@ -1125,7 +1148,7 @@ class SupabaseService {
       final response = await supabase
           .from('profiles')
           .select()
-          .inFilter('user_type', ['tutor', 'stutor'])
+          .inFilter('user_type', ['tutor', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
@@ -1171,7 +1194,7 @@ class SupabaseService {
     }
   }
 
-  /// [The Perfect Tutors, Anywhere] Student/Stutor: my goals ↔ target talents; target = Tutor + Stutor; limit.
+  /// [The Perfect Tutors, Anywhere] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; limit.
   static Future<List<Map<String, dynamic>>> getGlobalTutorsForStudent({
     required List<String> myGoals,
     required String currentUserId,
@@ -1189,7 +1212,7 @@ class SupabaseService {
       final response = await supabase
           .from('profiles')
           .select()
-          .inFilter('user_type', ['tutor', 'stutor'])
+          .inFilter('user_type', ['tutor', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(limit * 3);
 
@@ -1214,7 +1237,7 @@ class SupabaseService {
     }
   }
 
-  /// [Other Tutors in the area] Tutor/Stutor: my talents ↔ target talents; target = Tutor + Stutor; ≤30km; sort by match count.
+  /// [Other Tutors in the area] Tutor/Twiner: my talents ↔ target talents; target = Tutor + Twiner; ≤30km; sort by match count.
   static Future<List<Map<String, dynamic>>> getNearbyTrainersForTutor({
     required List<String> myTalents,
     required double currentLatitude,
@@ -1234,7 +1257,7 @@ class SupabaseService {
       final response = await supabase
           .from('profiles')
           .select()
-          .inFilter('user_type', ['tutor', 'stutor'])
+          .inFilter('user_type', ['tutor', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
@@ -1280,7 +1303,7 @@ class SupabaseService {
     }
   }
 
-  /// [Student Candidates in the area] Tutor/Stutor: my talents ↔ target goals; target = Student + Stutor; ≤30km; limit 30.
+  /// [Student Candidates in the area] Tutor/Twiner: my talents ↔ target goals; target = Student + Twiner; ≤30km; limit 30.
   static Future<List<Map<String, dynamic>>> getNearbyStudentsForTutor({
     required List<String> myTalents,
     required double currentLatitude,
@@ -1301,7 +1324,7 @@ class SupabaseService {
       final response = await supabase
           .from('profiles')
           .select()
-          .inFilter('user_type', ['student', 'stutor'])
+          .inFilter('user_type', ['student', 'twiner'])
           .neq('user_id', currentUserId)
           .limit(200);
 
@@ -1347,7 +1370,7 @@ class SupabaseService {
     }
   }
 
-  /// GlobalTalentMatchingScreen: [The Perfect Tutors, Anywhere] — match MY GOALS ↔ TARGET TALENTS (Student/Stutor only).
+  /// GlobalTalentMatchingScreen: [The Perfect Tutors, Anywhere] — match MY GOALS ↔ TARGET TALENTS (Student/Twiner only).
   static Future<List<Map<String, dynamic>>> getTalentMatchingCards({
     required String userType,
     required List<String> userTalentsOrGoals,
@@ -1355,8 +1378,8 @@ class SupabaseService {
     int limit = 100,
   }) async {
     try {
-      // NEW rule: match User's GOALS ↔ Target's TALENTS. Only Student/Stutor see this screen.
-      final targetTypes = ['tutor', 'stutor'];
+      // NEW rule: match User's GOALS ↔ Target's TALENTS. Only Student/Twiner see this screen.
+      final targetTypes = ['tutor', 'twiner'];
 
       final swiped = await supabase
           .from('matches')
@@ -1773,7 +1796,7 @@ class SupabaseService {
 
   /// 사용자 타입에 따라 매칭할 카드 목록 가져오기 (거리 기반 정렬)
   /// Supabase RPC 함수를 사용하여 서버에서 거리 계산 및 정렬 처리
-  /// [userType]: 'tutor' 또는 'student' (또는 'stutor')
+  /// [userType]: 'tutor' 또는 'student' (또는 'twiner')
   /// [currentLatitude]: 현재 사용자의 위도
   /// [currentLongitude]: 현재 사용자의 경도
   /// [userTalentsOrGoals]: Trainer의 경우 talents, Trainee의 경우 goals (현재는 사용하지 않지만 호환성을 위해 유지)

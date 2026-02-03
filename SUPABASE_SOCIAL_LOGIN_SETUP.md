@@ -106,11 +106,25 @@
 
 ## Redirect URL 설정
 
+### 웹 / 서버 콜백 (제공업체별 설정)
+
 모든 제공업체에서 다음 Redirect URL을 등록해야 합니다:
 
 ```
 https://oibboowecbxvjmookwtd.supabase.co/auth/v1/callback
 ```
+
+### 모바일 앱 (Android/iOS) – **필수**
+
+**localhost refused to connect (ERR_CONNECTION_REFUSED)** 오류를 막으려면 Supabase 대시보드에 모바일용 Redirect URL을 추가해야 합니다.
+
+1. **Supabase Dashboard** → **Authentication** → **URL Configuration**
+2. **Redirect URLs** 목록에 아래 주소를 **추가**한 뒤 Save:
+   ```
+   io.supabase.gurutown://login-callback/
+   ```
+
+이 URL이 없으면 모바일에서 소셜 로그인 후 localhost로 리다이렉트되어 연결 거부 오류가 납니다.
 
 ## 앱 설정 (Deep Link)
 
