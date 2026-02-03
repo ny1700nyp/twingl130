@@ -217,10 +217,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _openNearbyTalent() async {
+  Future<void> _openFindNearby(FindNearbySection section) async {
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FindNearbyTalentScreen()),
+      MaterialPageRoute(
+        builder: (_) => FindNearbyTalentScreen(section: section),
+      ),
     );
   }
 
@@ -384,24 +386,65 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-              // Home actions (above favorites list)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-                child: Column(
-                  children: [
-                    _homeActionRow(
-                      icon: Icons.search,
-                      title: 'Meet Tutors in Your Area',
-                      onTap: _openNearbyTalent,
+              // Home actions by user type: Student / Tutor / Stutor
+              ValueListenableBuilder<Map<String, dynamic>?>(
+                valueListenable: SupabaseService.currentUserProfileCache,
+                builder: (context, profile, _) {
+                  final userType = (profile?['user_type'] as String?)?.trim().toLowerCase() ?? '';
+                  final isStudent = userType == 'student';
+                  final isTutor = userType == 'tutor';
+                  final isStutor = userType == 'stutor';
+
+                  final actions = <Widget>[];
+                  if (isStudent || isStutor) {
+                    actions.addAll([
+                      _homeActionRow(
+                        icon: Icons.search,
+                        title: 'Meet Tutors in your area',
+                        onTap: () => _openFindNearby(FindNearbySection.meetTutors),
+                      ),
+                      const SizedBox(height: 10),
+                      _homeActionRow(
+                        icon: Icons.auto_awesome_outlined,
+                        title: 'The Perfect Tutors, Anywhere',
+                        onTap: _openTalentMatch,
+                      ),
+                    ]);
+                  }
+                  if (isTutor || isStutor) {
+                    if (actions.isNotEmpty) actions.add(const SizedBox(height: 10));
+                    actions.addAll([
+                      _homeActionRow(
+                        icon: Icons.groups_outlined,
+                        title: 'Other Tutors in the area',
+                        onTap: () => _openFindNearby(FindNearbySection.otherTrainers),
+                      ),
+                      const SizedBox(height: 10),
+                      _homeActionRow(
+                        icon: Icons.school_outlined,
+                        title: 'Student Candidates in the area',
+                        onTap: () => _openFindNearby(FindNearbySection.studentCandidates),
+                      ),
+                    ]);
+                  }
+                  if (actions.isEmpty) {
+                    actions.add(
+                      _homeActionRow(
+                        icon: Icons.search,
+                        title: 'Meet Tutors in your area',
+                        onTap: () => _openFindNearby(FindNearbySection.meetTutors),
+                      ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: actions,
                     ),
-                    const SizedBox(height: 10),
-                    _homeActionRow(
-                      icon: Icons.auto_awesome_outlined,
-                      title: 'The Perfect Tutors, Anywhere',
-                      onTap: _openTalentMatch,
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
 
               const Padding(

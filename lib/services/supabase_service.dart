@@ -297,7 +297,7 @@ class SupabaseService {
     }
   }
 
-  /// 사용자 타입에 따른 conversation 목록 (trainer_id/trainee_id)
+  /// 사용자 타입에 따른 conversation 목록 (trainer_id/trainee_id 컬럼 사용)
   static Future<List<Map<String, dynamic>>> getUserConversations(
     String userId,
     String userType,
@@ -305,9 +305,9 @@ class SupabaseService {
     try {
       final normalized = userType.trim().toLowerCase();
       dynamic response;
-      if (normalized == 'trainer') {
+      if (normalized == 'tutor') {
         response = await supabase.from('conversations').select().eq('trainer_id', userId);
-      } else if (normalized == 'trainee') {
+      } else if (normalized == 'student') {
         response = await supabase.from('conversations').select().eq('trainee_id', userId);
       } else {
         response = await supabase
@@ -1049,7 +1049,305 @@ class SupabaseService {
     await supabase.from('calendar_events').delete().eq('id', eventId);
   }
 
-  /// GlobalTalentMatchingScreen 지원: 키워드 기반 global cards (거리 없이)
+  // ----- User type & matching helpers (user_type: tutor | student | stutor) -----
+
+  /// Stutor 판단: profile['user_type'] == 'stutor' 이거나, goals·talents 둘 다 있으면 stutor.
+  static bool isStutorProfile(Map<String, dynamic> profile) {
+    final type = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    if (type == 'stutor') return true;
+    if (type.isNotEmpty) return false;
+    final goalsRaw = profile['goals'];
+    final talentsRaw = profile['talents'];
+    final hasGoals = goalsRaw is List && goalsRaw.isNotEmpty;
+    final hasTalents = talentsRaw is List && talentsRaw.isNotEmpty;
+    return hasGoals && hasTalents;
+  }
+
+  /// Effective user_type: 'tutor' | 'student' | 'stutor'. (구 trainer→tutor, 구 trainee→student 호환)
+  static String getEffectiveUserType(Map<String, dynamic> profile) {
+    final type = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    if (type == 'stutor') return 'stutor';
+    if (type == 'tutor' || type == 'student') return type;
+    if (type == 'trainer') return 'tutor';
+    if (type == 'trainee') return 'student';
+    if (isStutorProfile(profile)) return 'stutor';
+    return type.isNotEmpty ? type : 'student';
+  }
+
+  /// Goals for matching: Student = talents column (stored as goals); Stutor = goals column.
+  static List<String> getProfileGoals(Map<String, dynamic> profile) {
+    final type = getEffectiveUserType(profile);
+    if (type == 'student') {
+      final raw = (profile['talents'] as List<dynamic>?) ?? [];
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (type == 'stutor') {
+      final raw = (profile['goals'] as List<dynamic>?) ?? (profile['talents'] as List<dynamic>?);
+      if (raw == null) return [];
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return [];
+  }
+
+  /// Talents for matching: Tutor = talents; Stutor = talents.
+  static List<String> getProfileTalents(Map<String, dynamic> profile) {
+    final type = getEffectiveUserType(profile);
+    if (type == 'tutor' || type == 'stutor') {
+      final raw = (profile['talents'] as List<dynamic>?) ?? [];
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return [];
+  }
+
+  /// Match count: how many of [myKeywords] (normalized) appear in [targetList].
+  static int _matchCount(Set<String> myKeywordsNorm, List<String> targetList) {
+    final targetNorm = targetList.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+    return targetNorm.intersection(myKeywordsNorm).length;
+  }
+
+  /// [Meet Tutors in your area] Student/Stutor: my goals ↔ target talents; target = Tutor + Stutor; ≤30km.
+  static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
+    required List<String> myGoals,
+    required double currentLatitude,
+    required double currentLongitude,
+    required String currentUserId,
+    double maxDistanceMeters = 30000,
+  }) async {
+    try {
+      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
+      final swipedIds = <String>{};
+      for (final e in swiped) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) swipedIds.add(id);
+      }
+      final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+
+      final response = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('user_type', ['tutor', 'stutor'])
+          .neq('user_id', currentUserId)
+          .limit(200);
+
+      final list = response
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((p) {
+            final id = p['user_id'] as String? ?? '';
+            return id.isNotEmpty && !swipedIds.contains(id);
+          })
+          .toList();
+
+      for (final p in list) {
+        final lat = (p['latitude'] as num?)?.toDouble();
+        final lon = (p['longitude'] as num?)?.toDouble();
+        if (lat != null && lon != null) {
+          p['distance_meters'] = Geolocator.distanceBetween(
+            currentLatitude, currentLongitude, lat, lon,
+          );
+        }
+      }
+      list.removeWhere((p) {
+        final d = (p['distance_meters'] as num?)?.toDouble();
+        return d == null || d > maxDistanceMeters;
+      });
+
+      for (final p in list) {
+        final talents = getProfileTalents(p);
+        p['match_count'] = _matchCount(myKeywordsNorm, talents);
+      }
+      list.removeWhere((p) => (p['match_count'] as int? ?? 0) == 0);
+      list.sort((a, b) {
+        final ma = (a['match_count'] as int? ?? 0);
+        final mb = (b['match_count'] as int? ?? 0);
+        if (ma != mb) return mb.compareTo(ma);
+        final da = (a['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        return da.compareTo(db);
+      });
+      return list;
+    } catch (e) {
+      print('getNearbyTutorsForStudent: $e');
+      return [];
+    }
+  }
+
+  /// [The Perfect Tutors, Anywhere] Student/Stutor: my goals ↔ target talents; target = Tutor + Stutor; limit.
+  static Future<List<Map<String, dynamic>>> getGlobalTutorsForStudent({
+    required List<String> myGoals,
+    required String currentUserId,
+    int limit = 30,
+  }) async {
+    try {
+      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
+      final swipedIds = <String>{};
+      for (final e in swiped) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) swipedIds.add(id);
+      }
+      final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+
+      final response = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('user_type', ['tutor', 'stutor'])
+          .neq('user_id', currentUserId)
+          .limit(limit * 3);
+
+      final list = response
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((p) {
+            final id = p['user_id'] as String? ?? '';
+            return id.isNotEmpty && !swipedIds.contains(id);
+          })
+          .toList();
+
+      for (final p in list) {
+        final talents = getProfileTalents(p);
+        p['match_count'] = _matchCount(myKeywordsNorm, talents);
+      }
+      final filtered = list.where((p) => (p['match_count'] as int? ?? 0) > 0).toList();
+      filtered.sort((a, b) => (b['match_count'] as int? ?? 0).compareTo((a['match_count'] as int? ?? 0)));
+      return filtered.take(limit).toList();
+    } catch (e) {
+      print('getGlobalTutorsForStudent: $e');
+      return [];
+    }
+  }
+
+  /// [Other Tutors in the area] Tutor/Stutor: my talents ↔ target talents; target = Tutor + Stutor; ≤30km; sort by match count.
+  static Future<List<Map<String, dynamic>>> getNearbyTrainersForTutor({
+    required List<String> myTalents,
+    required double currentLatitude,
+    required double currentLongitude,
+    required String currentUserId,
+    double maxDistanceMeters = 30000,
+  }) async {
+    try {
+      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
+      final swipedIds = <String>{};
+      for (final e in swiped) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) swipedIds.add(id);
+      }
+      final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+
+      final response = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('user_type', ['tutor', 'stutor'])
+          .neq('user_id', currentUserId)
+          .limit(200);
+
+      final list = response
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((p) {
+            final id = p['user_id'] as String? ?? '';
+            return id.isNotEmpty && !swipedIds.contains(id);
+          })
+          .toList();
+
+      for (final p in list) {
+        final lat = (p['latitude'] as num?)?.toDouble();
+        final lon = (p['longitude'] as num?)?.toDouble();
+        if (lat != null && lon != null) {
+          p['distance_meters'] = Geolocator.distanceBetween(
+            currentLatitude, currentLongitude, lat, lon,
+          );
+        }
+      }
+      list.removeWhere((p) {
+        final d = (p['distance_meters'] as num?)?.toDouble();
+        return d == null || d > maxDistanceMeters;
+      });
+
+      for (final p in list) {
+        final talents = getProfileTalents(p);
+        p['match_count'] = _matchCount(myKeywordsNorm, talents);
+      }
+      // match_count 0이어도 표시 (매칭 많은 순 → 가까운 순 정렬만 유지)
+      list.sort((a, b) {
+        final ma = (a['match_count'] as int? ?? 0);
+        final mb = (b['match_count'] as int? ?? 0);
+        if (ma != mb) return mb.compareTo(ma);
+        final da = (a['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        return da.compareTo(db);
+      });
+      return list;
+    } catch (e) {
+      print('getNearbyTrainersForTutor: $e');
+      return [];
+    }
+  }
+
+  /// [Student Candidates in the area] Tutor/Stutor: my talents ↔ target goals; target = Student + Stutor; ≤30km; limit 30.
+  static Future<List<Map<String, dynamic>>> getNearbyStudentsForTutor({
+    required List<String> myTalents,
+    required double currentLatitude,
+    required double currentLongitude,
+    required String currentUserId,
+    double maxDistanceMeters = 30000,
+    int limit = 30,
+  }) async {
+    try {
+      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
+      final swipedIds = <String>{};
+      for (final e in swiped) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) swipedIds.add(id);
+      }
+      final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+
+      final response = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('user_type', ['student', 'stutor'])
+          .neq('user_id', currentUserId)
+          .limit(200);
+
+      final list = response
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((p) {
+            final id = p['user_id'] as String? ?? '';
+            return id.isNotEmpty && !swipedIds.contains(id);
+          })
+          .toList();
+
+      for (final p in list) {
+        final lat = (p['latitude'] as num?)?.toDouble();
+        final lon = (p['longitude'] as num?)?.toDouble();
+        if (lat != null && lon != null) {
+          p['distance_meters'] = Geolocator.distanceBetween(
+            currentLatitude, currentLongitude, lat, lon,
+          );
+        }
+      }
+      list.removeWhere((p) {
+        final d = (p['distance_meters'] as num?)?.toDouble();
+        return d == null || d > maxDistanceMeters;
+      });
+
+      for (final p in list) {
+        final goals = getProfileGoals(p);
+        p['match_count'] = _matchCount(myKeywordsNorm, goals);
+      }
+      list.removeWhere((p) => (p['match_count'] as int? ?? 0) == 0);
+      list.sort((a, b) {
+        final ma = (a['match_count'] as int? ?? 0);
+        final mb = (b['match_count'] as int? ?? 0);
+        if (ma != mb) return mb.compareTo(ma);
+        final da = (a['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
+        return da.compareTo(db);
+      });
+      return list.take(limit).toList();
+    } catch (e) {
+      print('getNearbyStudentsForTutor: $e');
+      return [];
+    }
+  }
+
+  /// GlobalTalentMatchingScreen: [The Perfect Tutors, Anywhere] — match MY GOALS ↔ TARGET TALENTS (Student/Stutor only).
   static Future<List<Map<String, dynamic>>> getTalentMatchingCards({
     required String userType,
     required List<String> userTalentsOrGoals,
@@ -1057,12 +1355,9 @@ class SupabaseService {
     int limit = 100,
   }) async {
     try {
-      // Product requirement:
-      // Talent matching should only match "my talents" with TRAINER talents.
-      // Do not show / match trainees in Talent Match results.
-      final targetType = 'trainer';
+      // NEW rule: match User's GOALS ↔ Target's TALENTS. Only Student/Stutor see this screen.
+      final targetTypes = ['tutor', 'stutor'];
 
-      // already swiped
       final swiped = await supabase
           .from('matches')
           .select('swiped_user_id')
@@ -1072,15 +1367,15 @@ class SupabaseService {
         final id = (e as Map)['swiped_user_id'] as String?;
         if (id != null && id.isNotEmpty) swipedIds.add(id);
       }
-    
+
       final response = await supabase
           .from('profiles')
           .select()
-          .eq('user_type', targetType)
+          .inFilter('user_type', targetTypes)
           .neq('user_id', currentUserId)
           .limit(limit);
 
-      final keywords = userTalentsOrGoals.map((e) => e.toLowerCase()).toSet();
+      final keywords = userTalentsOrGoals.map((e) => e.toLowerCase().trim()).where((e) => e.isNotEmpty).toSet();
       final list = response
           .map((e) => Map<String, dynamic>.from(e))
           .where((p) {
@@ -1090,19 +1385,14 @@ class SupabaseService {
           .toList();
 
       int matchCount(Map<String, dynamic> p) {
-        final raw = (p['talents'] as List<dynamic>?) ?? [];
-        final set = raw.map((e) => e.toString().toLowerCase()).toSet();
-        return set.intersection(keywords).length;
+        final talents = getProfileTalents(p);
+        return _matchCount(keywords, talents);
       }
 
-      // Compute + attach match_count so UI can use it.
       for (final p in list) {
         p['match_count'] = matchCount(p);
       }
 
-      // Talent match screen requirement:
-      // - do NOT show non-matching cards (match_count == 0)
-      // - sort by match_count desc (only)
       final filtered = list.where((p) => (p['match_count'] as int? ?? 0) > 0).toList();
       filtered.sort((a, b) {
         final ma = (a['match_count'] as int? ?? 0);
@@ -1110,7 +1400,7 @@ class SupabaseService {
         return mb.compareTo(ma);
       });
 
-      return filtered;
+      return filtered.take(limit).toList();
     } catch (e) {
       print('Failed to get talent matching cards: $e');
       return [];
@@ -1483,7 +1773,7 @@ class SupabaseService {
 
   /// 사용자 타입에 따라 매칭할 카드 목록 가져오기 (거리 기반 정렬)
   /// Supabase RPC 함수를 사용하여 서버에서 거리 계산 및 정렬 처리
-  /// [userType]: 'trainer' 또는 'trainee'
+  /// [userType]: 'tutor' 또는 'student' (또는 'stutor')
   /// [currentLatitude]: 현재 사용자의 위도
   /// [currentLongitude]: 현재 사용자의 경도
   /// [userTalentsOrGoals]: Trainer의 경우 talents, Trainee의 경우 goals (현재는 사용하지 않지만 호환성을 위해 유지)
@@ -1570,8 +1860,8 @@ class SupabaseService {
         print('스와이프 기록 가져오기 실패: $e');
       }
 
-      // 반대 타입의 사용자들 가져오기
-      final targetType = userType == 'trainer' ? 'trainee' : 'trainer';
+      // 반대 타입의 사용자들 가져오기 (tutor ↔ student)
+      final targetType = userType == 'tutor' ? 'student' : 'tutor';
 
       // 모든 프로필 가져온 후 필터링
       final response = await supabase
@@ -1819,7 +2109,7 @@ class SupabaseService {
   }
 
   /// 사용자 약관 동의 저장
-  /// [agreementType]: 'trainer_terms' 또는 'trainee_waiver'
+  /// [agreementType]: 'tutor_terms' 또는 'student_waiver'
   /// [version]: 약관 버전 (예: 'v1.0')
   static Future<void> saveUserAgreement({
     required String agreementType,

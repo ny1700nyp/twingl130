@@ -82,7 +82,7 @@ BEGIN
     FROM unnest(COALESCE(p.talents, '{}'::text[])) t
     WHERE lower(t) = ANY(cuk.keywords)
   ) mc
-  WHERE p.user_type = 'trainer'
+  WHERE p.user_type IN ('tutor', 'stutor')
     AND p.user_id != get_talent_matching_profiles.p_user_id
     AND p.user_id NOT IN (SELECT swiped_user_id FROM excluded_users)
     AND mc.match_count > 0

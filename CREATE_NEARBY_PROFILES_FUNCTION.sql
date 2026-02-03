@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS profiles_geom_geog_idx ON profiles USING GIST (geom_g
 -- 함수 테스트 (선택사항)
 -- SELECT * FROM get_nearby_profiles(
 --   'user-uuid-here'::UUID,
---   'trainer',
+--   'tutor',
 --   37.7749,  -- latitude
 --   -122.4194,  -- longitude
 --   50

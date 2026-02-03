@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../utils/distance_formatter.dart';
 import '../utils/time_utils.dart';
 import 'profile_detail_screen.dart';
 
@@ -525,6 +526,30 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  static String _sheetAgeRange(int? age, String? createdAt) {
+    if (age == null) return '';
+    int currentYear = DateTime.now().year;
+    int registrationYear = currentYear;
+    if (createdAt != null) {
+      try {
+        registrationYear = DateTime.parse(createdAt).year;
+      } catch (_) {}
+    }
+    int currentAge = age + (currentYear - registrationYear);
+    int ageRange = (currentAge ~/ 10) * 10;
+    return '${ageRange}s';
+  }
+
+  static String _sheetGenderLabel(String? gender) {
+    if (gender == null || gender.trim().isEmpty || gender == 'Prefer not to say') return '';
+    switch (gender.trim().toLowerCase()) {
+      case 'man': return 'Man';
+      case 'woman': return 'Woman';
+      case 'non-binary': return 'Non-binary';
+      default: return gender;
+    }
+  }
+
   Future<void> _openOtherProfilePopup() async {
     final otherUserId = widget.otherUserId.trim();
     if (otherUserId.isEmpty) return;
@@ -535,22 +560,27 @@ class _ChatScreenState extends State<ChatScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final h = MediaQuery.of(ctx).size.height;
+        final media = MediaQuery.of(ctx);
+        final h = media.size.height;
+        final topPadding = media.padding.top;
+        // 시트 상단이 인디케이터/노치 아래에 오도록 높이 제한 (슬라이드 다운으로 닫기 가능)
+        final sheetHeight = (h - topPadding - 24).clamp(400.0, h * 0.88);
         final surface = Theme.of(ctx).colorScheme.surface;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Material(
-              color: surface,
-              elevation: 10,
-              borderRadius: BorderRadius.circular(18),
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                height: h * 0.92,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 10),
-                    Container(
+        return Padding(
+          padding: EdgeInsets.only(top: topPadding + 8, left: 12, right: 12, bottom: 12),
+          child: Material(
+            color: surface,
+            elevation: 10,
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: SizedBox(
+              height: sheetHeight,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Container(
                       width: 42,
                       height: 4,
                       decoration: BoxDecoration(
@@ -558,46 +588,93 @@ class _ChatScreenState extends State<ChatScreen> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: FutureBuilder<Map<String, dynamic>?>(
-                        future: SupabaseService.getPublicProfile(otherUserId),
-                        builder: (context, snap) {
-                          if (snap.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          if (snap.hasError) {
-                            return Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Text('Failed to load profile: ${snap.error}'),
-                              ),
-                            );
-                          }
-                          final profile = snap.data;
-                          if (profile == null) {
-                            return const Center(child: Text('Profile not found'));
-                          }
-
-                          final p = Map<String, dynamic>.from(profile);
-                          final meters = _distanceMetersToOther(p);
-                          if (meters != null) {
-                            // Enables privacy-friendly distance rendering already used across the app.
-                            p['distance_meters'] = meters;
-                          }
-
-                          // Show full details inside the card, but hide action buttons for this popup.
-                          return ProfileDetailScreen(
-                            profile: p,
-                            hideAppBar: true,
-                            hideActionButtons: true,
-                            currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                  ),
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: FutureBuilder<Map<String, dynamic>?>(
+                      future: SupabaseService.getPublicProfile(otherUserId),
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (snap.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text('Failed to load profile: ${snap.error}'),
+                            ),
                           );
-                        },
-                      ),
+                        }
+                        final profile = snap.data;
+                        if (profile == null) {
+                          return const Center(child: Text('Profile not found'));
+                        }
+
+                        final p = Map<String, dynamic>.from(profile);
+                        final meters = _distanceMetersToOther(p);
+                        if (meters != null) {
+                          p['distance_meters'] = meters;
+                        }
+
+                        final name = p['name'] as String? ?? 'Unknown';
+                        final age = p['age'] as int?;
+                        final gender = p['gender'] as String?;
+                        final distanceStr = meters != null ? formatDistanceMeters(meters) : null;
+                        final ageStr = _sheetAgeRange(age, p['created_at'] as String?);
+                        final genderStr = _sheetGenderLabel(gender);
+                        final subParts = <String>[
+                          if (distanceStr != null && distanceStr.isNotEmpty) distanceStr,
+                          if (ageStr.isNotEmpty) ageStr,
+                          if (genderStr.isNotEmpty) genderStr,
+                        ];
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (subParts.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      subParts.join('  •  '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: ProfileDetailScreen(
+                                profile: p,
+                                hideAppBar: true,
+                                hideActionButtons: true,
+                                hideNameAgeGenderInBody: true,
+                                currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

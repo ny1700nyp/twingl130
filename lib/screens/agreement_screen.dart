@@ -131,7 +131,7 @@ class _AgreementScreenState extends State<AgreementScreen> {
           '/onboarding',
           (route) => false, // 모든 이전 라우트 제거
           arguments: {
-            'userType': widget.agreementType == AgreementType.trainer ? 'trainer' : 'trainee',
+            'userType': widget.agreementType == AgreementType.trainer ? 'tutor' : 'student',
           },
         );
       }

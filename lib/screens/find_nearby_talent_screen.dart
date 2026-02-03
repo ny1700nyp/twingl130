@@ -8,8 +8,17 @@ import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
 
+/// Section mode for nearby discovery: tutors (Student/Stutor), other tutors (Tutor/Stutor), or student candidates (Tutor/Stutor).
+enum FindNearbySection {
+  meetTutors,
+  otherTrainers,
+  studentCandidates,
+}
+
 class FindNearbyTalentScreen extends StatefulWidget {
-  const FindNearbyTalentScreen({super.key});
+  final FindNearbySection section;
+
+  const FindNearbyTalentScreen({super.key, this.section = FindNearbySection.meetTutors});
 
   @override
   State<FindNearbyTalentScreen> createState() => _FindNearbyTalentScreenState();
@@ -101,19 +110,15 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     return '\$$n/hr';
   }
 
-  int _matchCountForTalents(Iterable<String> talents) {
-    return talents.where((t) => _myKeywordsNorm.contains(_norm(t))).length;
-  }
-
-  int _matchCountForCard(Map<String, dynamic> p) {
-    final talents = _stringListFromDynamic(p['talents']);
-    return _matchCountForTalents(talents);
-  }
-
-  double _distanceMetersForCard(Map<String, dynamic> p) {
-    final distMeters = (p['distance_meters'] as num?)?.toDouble();
-    // Put unknown distances at the end for sorting.
-    return distMeters ?? double.infinity;
+  String get _sectionTitle {
+    switch (widget.section) {
+      case FindNearbySection.meetTutors:
+        return 'Meet Tutors in Your Area';
+      case FindNearbySection.otherTrainers:
+        return 'Other Tutors in the area';
+      case FindNearbySection.studentCandidates:
+        return 'Student Candidates in the area';
+    }
   }
 
   List<String> _stringListFromDynamic(dynamic value) {
@@ -222,52 +227,40 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
         return;
       }
 
-      final raw = (profile?['talents'] as List<dynamic>?) ?? <dynamic>[];
-      final myTalents = raw.map((e) => e.toString()).toList();
-      _myKeywordsNorm = myTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
-
-      final cards = await SupabaseService.getMatchingCards(
-        // Product requirement:
-        // Find Nearby should show TRAINERS only (match my talents with trainer talents).
-        // Some deployed RPC versions choose candidates based on p_user_type; passing 'trainee'
-        // makes the function return trainers in those versions. We still filter below as a guard.
-        userType: 'trainee',
-        currentLatitude: lat,
-        currentLongitude: lon,
-        userTalentsOrGoals: myTalents,
-        currentUserId: user.id,
-      );
-
-      // Safety: never show trainees in results.
-      cards.removeWhere((p) => (p['user_type'] as String?)?.trim().toLowerCase() == 'trainee');
-
-      // Product requirement:
-      // "Meet Tutors in Your Area" should only show tutors within 20km.
-      const maxDistanceMeters = 20000.0;
-      cards.removeWhere((p) {
-        final d = (p['distance_meters'] as num?)?.toDouble();
-        if (d == null) return true; // unknown distance => exclude for "in your area"
-        return d > maxDistanceMeters;
-      });
-
-      // Sort cards:
-      // 1) more talent matches first
-      // 2) if tie, closer first
-      // 3) if tie, name A-Z (stable-ish)
-      cards.sort((a, b) {
-        final ma = _matchCountForCard(a);
-        final mb = _matchCountForCard(b);
-        if (ma != mb) return mb.compareTo(ma);
-
-        final da = _distanceMetersForCard(a);
-        final db = _distanceMetersForCard(b);
-        final dcmp = da.compareTo(db);
-        if (dcmp != 0) return dcmp;
-
-        final na = (a['name'] as String? ?? '').toLowerCase();
-        final nb = (b['name'] as String? ?? '').toLowerCase();
-        return na.compareTo(nb);
-      });
+      List<Map<String, dynamic>> cards;
+      switch (widget.section) {
+        case FindNearbySection.meetTutors:
+          final myGoals = SupabaseService.getProfileGoals(profile ?? {});
+          _myKeywordsNorm = myGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
+          cards = await SupabaseService.getNearbyTutorsForStudent(
+            myGoals: myGoals,
+            currentLatitude: lat,
+            currentLongitude: lon,
+            currentUserId: user.id,
+          );
+          break;
+        case FindNearbySection.otherTrainers:
+          final myTalents = SupabaseService.getProfileTalents(profile ?? {});
+          _myKeywordsNorm = myTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
+          cards = await SupabaseService.getNearbyTrainersForTutor(
+            myTalents: myTalents,
+            currentLatitude: lat,
+            currentLongitude: lon,
+            currentUserId: user.id,
+          );
+          break;
+        case FindNearbySection.studentCandidates:
+          final myTalents = SupabaseService.getProfileTalents(profile ?? {});
+          _myKeywordsNorm = myTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
+          cards = await SupabaseService.getNearbyStudentsForTutor(
+            myTalents: myTalents,
+            currentLatitude: lat,
+            currentLongitude: lon,
+            currentUserId: user.id,
+            limit: 30,
+          );
+          break;
+      }
 
       if (!mounted) return;
       await _precacheTopImages(cards);
@@ -409,7 +402,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Meet Tutors in Your Area')),
+      appBar: AppBar(title: Text(_sectionTitle)),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -482,7 +475,9 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
 
   Widget _buildCard(BuildContext context, Map<String, dynamic> p) {
     final name = p['name'] as String? ?? 'Unknown';
-    final talents = _stringListFromDynamic(p['talents']);
+    final talents = widget.section == FindNearbySection.studentCandidates
+        ? SupabaseService.getProfileGoals(p)
+        : _stringListFromDynamic(p['talents']);
 
     final distMeters = (p['distance_meters'] as num?)?.toDouble();
     final distanceLabel = distMeters == null ? null : formatDistanceMeters(distMeters);
@@ -511,11 +506,17 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            height: constraints.maxHeight,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
             Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
@@ -591,7 +592,9 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
             if (shownTalents.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                'I can teach',
+                widget.section == FindNearbySection.studentCandidates
+                    ? 'I want to learn'
+                    : 'I can teach',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -625,22 +628,28 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                 }).toList(),
               ),
             ],
-            const SizedBox(height: 14),
-            Text(
-              'Tutoring rate',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+            if (widget.section != FindNearbySection.studentCandidates) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Tutoring rate',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                rateLabel ?? '—',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ],
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              rateLabel ?? '—',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

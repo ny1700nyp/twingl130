@@ -85,7 +85,7 @@ class CategoryService {
       }
     } catch (e) {
       print('XML parsing error: $e');
-      throw e;
+      rethrow;
     }
 
     return categories;

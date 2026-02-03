@@ -34,7 +34,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isSaving = false;
 
   // Immutable (after initial onboarding)
-  String _userType = 'trainee'; // trainer=tutor, trainee=student (dummy: student only)
+  String _userType = 'student'; // tutor | student | stutor (dummy: student only)
   String _gender = 'Prefer not to say';
   DateTime? _birthdateLocal;
   final _nameController = TextEditingController();
@@ -72,7 +72,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   bool get _isEdit => widget.existingProfile != null;
   bool get _isDummy => !_isEdit && _isAnonymousSession();
-  bool get _isTutor => _userType == 'trainer';
+  bool get _isTutor => _userType == 'tutor' || _userType == 'stutor';
 
   static const String _tutorWaiverTitle = 'Tutor Agreement & Liability Waiver';
   static const String _tutorWaiverText = '''
@@ -82,7 +82,7 @@ Independent Status: I understand that Twingl is a matching platform and I am not
 
 Safety & Zero Tolerance: I agree to adhere to Twingl's strict safety guidelines. I understand that any form of harassment, discrimination, or inappropriate behavior will result in immediate termination of my account and potential legal action.
 
-Release of Liability: I hereby release and hold harmless Twingl, its owners, and affiliates from any and all liability, claims, or demands arising out of my participation as a trainer.
+Release of Liability: I hereby release and hold harmless Twingl, its owners, and affiliates from any and all liability, claims, or demands arising out of my participation as a tutor.
 ''';
 
   static const String _studentWaiverTitle = 'Student Assumption of Risk & Waiver';
@@ -112,14 +112,14 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     super.initState();
 
     final initType = (widget.initialUserType ?? '').trim().toLowerCase();
-    if (initType == 'trainer' || initType == 'trainee') {
+    if (initType == 'tutor' || initType == 'student' || initType == 'stutor') {
       _userType = initType;
     }
 
     final existing = widget.existingProfile;
     if (existing != null) {
       final t = (existing['user_type'] as String?)?.trim().toLowerCase();
-      if (t == 'trainer' || t == 'trainee') _userType = t!;
+      if (t == 'tutor' || t == 'student' || t == 'stutor') _userType = t!;
       _nameController.text = (existing['name'] as String?) ?? '';
       _gender = (existing['gender'] as String?) ?? _gender;
 
@@ -187,7 +187,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     }
 
     // Student profiles should not have "Lesson info". Clear any legacy fields loaded from older versions.
-    if (_userType == 'trainee') {
+    if (_userType == 'student') {
       _lessonLocations.clear();
       _aboutLessonController.text = '';
       _rateController.text = '';
@@ -346,7 +346,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     _dummyDataPrefilled = true;
 
     // Dummy flow: always student. Otherwise use current role or force student on regenerate.
-    final pickedUserType = _isDummy ? 'trainee' : (regenerate ? 'trainee' : _userType);
+    final pickedUserType = _isDummy ? 'student' : (regenerate ? 'student' : _userType);
 
     const firstNames = <String>[
       'John','Michael','David','James','Robert','William','Christopher','Daniel','Matthew','Joshua',
@@ -359,7 +359,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     final first = firstNames[_dummyRng.nextInt(firstNames.length)];
     final last = lastNames[_dummyRng.nextInt(lastNames.length)];
     final baseName = '$first $last';
-    final name = pickedUserType == 'trainee' ? '$baseName ST' : baseName;
+    final name = pickedUserType == 'student' ? '$baseName ST' : baseName;
 
     const genders = ['man', 'woman', 'non-binary', 'Prefer not to say'];
     final gender = genders[_dummyRng.nextInt(genders.length)];
@@ -399,7 +399,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       _birthdateLocal = birth;
       _talentsOrGoals = picked;
       _aboutMeController.text = about;
-      if (_userType == 'trainer') {
+      if (_userType == 'tutor' || _userType == 'stutor') {
         _lessonLocations
           ..clear()
           ..add('online')
@@ -409,7 +409,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         _lessonLocations.clear();
         _aboutLessonController.text = '';
       }
-      if (_userType == 'trainer') {
+      if (_userType == 'tutor' || _userType == 'stutor') {
         _rateController.text = (20 + _dummyRng.nextInt(81)).toString(); // 20..100
         _parentParticipationWelcomed = _dummyRng.nextBool();
       } else {
@@ -518,7 +518,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
   List<_OnboardingStepKey> _stepKeys({String? userTypeOverride}) {
     final type = (userTypeOverride ?? _userType).trim().toLowerCase();
-    final isTutor = type == 'trainer';
+    final isTutor = type == 'tutor' || type == 'stutor';
     return <_OnboardingStepKey>[
       _OnboardingStepKey.basic,
       _OnboardingStepKey.topics,
@@ -609,7 +609,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     try {
       final existing = widget.existingProfile;
       final fixedUserType = (_isEdit ? (existing?['user_type'] as String?) : _userType) ?? _userType;
-      final isTutorProfile = fixedUserType.trim().toLowerCase() == 'trainer';
+      final isTutorProfile = fixedUserType.trim().toLowerCase() == 'tutor' || fixedUserType.trim().toLowerCase() == 'stutor';
       final fixedName = _isEdit ? (existing?['name'] as String?) : _nameController.text.trim();
       final fixedGender = _isEdit ? (existing?['gender'] as String?) : _gender;
 
@@ -817,8 +817,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     ),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'trainer', label: Text('Tutor')),
-                      ButtonSegment(value: 'trainee', label: Text('Student')),
+                      ButtonSegment(value: 'tutor', label: Text('Tutor')),
+                      ButtonSegment(value: 'student', label: Text('Student')),
                     ],
                     selected: {_userType},
                     onSelectionChanged: (_isDummy || _isEdit)
@@ -827,7 +827,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                             final nextType = s.first;
                             setState(() {
                               _userType = nextType;
-                              if (_userType == 'trainee') {
+                              if (_userType == 'student') {
                                 // Students don't have Lesson info.
                                 _lessonLocations.clear();
                                 _aboutLessonController.text = '';

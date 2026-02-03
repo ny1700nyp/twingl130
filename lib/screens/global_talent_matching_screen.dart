@@ -218,17 +218,15 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       return;
     }
 
-    // DB 통합: trainee의 goals도 talents에 저장 (기존 goals 컬럼은 마이그레이션 동안만 fallback)
-    final rawList =
-        (myProfile?['talents'] as List<dynamic>?) ?? (myProfile?['goals'] as List<dynamic>?);
-    final myKeywords = rawList?.map((e) => e.toString()).toList() ?? <String>[];
-    _myKeywordsNorm = myKeywords.map(_norm).where((e) => e.isNotEmpty).toSet();
+    // NEW rule: match MY GOALS ↔ TARGET TALENTS. Only Student/Stutor use this screen.
+    final myGoals = SupabaseService.getProfileGoals(myProfile ?? {});
+    _myKeywordsNorm = myGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
 
     final cards = await SupabaseService.getTalentMatchingCards(
       userType: userType,
-      userTalentsOrGoals: myKeywords,
+      userTalentsOrGoals: myGoals,
       currentUserId: user.id,
-      limit: 100,
+      limit: 30,
     );
 
     // Add distance_meters client-side for privacy-friendly display in UI.

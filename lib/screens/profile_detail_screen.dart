@@ -17,6 +17,8 @@ class ProfileDetailScreen extends StatelessWidget {
   final bool hideAppBar;
   final Map<String, dynamic>? currentUserProfile;
   final bool hideActionButtons;
+  /// When true (e.g. in chat profile sheet), do not show name/age/gender block in body.
+  final bool hideNameAgeGenderInBody;
 
   const ProfileDetailScreen({
     super.key,
@@ -24,6 +26,7 @@ class ProfileDetailScreen extends StatelessWidget {
     this.hideAppBar = false,
     this.currentUserProfile,
     this.hideActionButtons = false,
+    this.hideNameAgeGenderInBody = false,
   });
 
   String _getPronouns(String? gender) {
@@ -124,13 +127,13 @@ class ProfileDetailScreen extends StatelessWidget {
     );
   }
 
-  ButtonStyle _profilePrimaryActionStyle() {
+  ButtonStyle _profilePrimaryActionStyle({double verticalPadding = 16}) {
     // Brand color requested by user: #FF6363
     const brand = Color(0xFFFF6363);
     return ElevatedButton.styleFrom(
       backgroundColor: brand,
       foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: EdgeInsets.symmetric(vertical: verticalPadding),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
@@ -153,11 +156,11 @@ class ProfileDetailScreen extends StatelessWidget {
       );
     }
 
-    // base64 data URL인 경우
+    // base64 data URL인 경우 (cover로 채워서 라운드 클립이 보이도록)
     if (imagePath.startsWith('data:image')) {
       return Image.memory(
         base64Decode(imagePath.split(',')[1]),
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         height: 300,
         width: double.infinity,
         errorBuilder: (ctx, error, stackTrace) {
@@ -178,7 +181,7 @@ class ProfileDetailScreen extends StatelessWidget {
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return Image.network(
         imagePath,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         height: 300,
         width: double.infinity,
         errorBuilder: (ctx, error, stackTrace) {
@@ -200,7 +203,7 @@ class ProfileDetailScreen extends StatelessWidget {
       try {
         return Image.file(
           File(imagePath),
-          fit: BoxFit.contain,
+          fit: BoxFit.cover,
           height: 300,
           width: double.infinity,
           errorBuilder: (context, error, stackTrace) {
@@ -388,9 +391,9 @@ class ProfileDetailScreen extends StatelessWidget {
   }
 
   Widget _buildPhotoSlider(BuildContext context, List<String> photos) {
-    final userType = profile['user_type'] as String? ?? '';
-    final isTrainer = userType == 'trainer';
-    
+    final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    final isTutorOrStutor = userType == 'tutor' || userType == 'stutor';
+
     if (photos.isEmpty) {
       return Container(
         height: 300,
@@ -404,8 +407,8 @@ class ProfileDetailScreen extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-            // Trainer인 경우에만 공유 버튼 표시
-            if (isTrainer)
+            // Tutor/Stutor인 경우에만 공유 버튼 표시
+            if (isTutorOrStutor)
               Positioned(
                 top: 8,
                 right: 8,
@@ -422,7 +425,7 @@ class ProfileDetailScreen extends StatelessWidget {
         children: [
           _buildProfileImage(context, photos[0]),
           // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-          if (isTrainer)
+          if (isTutorOrStutor)
             Positioned(
               top: 8,
               right: 8,
@@ -440,7 +443,7 @@ class ProfileDetailScreen extends StatelessWidget {
           buildImage: (imagePath) => _buildProfileImage(context, imagePath),
         ),
         // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-        if (isTrainer)
+        if (isTutorOrStutor)
           Positioned(
             top: 8,
             right: 8,
@@ -572,8 +575,8 @@ class ProfileDetailScreen extends StatelessWidget {
     final certificatePhotos = profile['certificate_photos'] as List<dynamic>?;
     final aboutMe = (profile['about_me'] as String?)?.trim();
 
-    // DB 통합: trainee의 goal도 talents 필드에 저장 (기존 goals 컬럼은 마이그레이션 동안만 fallback)
-    final traineeGoals = userType == 'trainee'
+    // Student/Stutor: goals (student는 talents에 저장, stutor는 goals 또는 talents)
+    final traineeGoals = (userType == 'student' || userType == 'stutor')
         ? (profile['talents'] as List<dynamic>?) ?? (profile['goals'] as List<dynamic>?)
         : null;
     final mainPhotoPath = profile['main_photo_path'] as String?;
@@ -581,15 +584,14 @@ class ProfileDetailScreen extends StatelessWidget {
     
     // 현재 사용자의 goals 또는 talents 가져오기
     final currentUserType = (currentUserProfile?['user_type'] as String?)?.trim().toLowerCase();
-    // DB 통합: trainee의 goal도 talents 필드에 저장 (기존 goals 컬럼은 마이그레이션 동안만 fallback)
-    final List<String> currentUserGoals = currentUserType == 'trainee'
+    final List<String> currentUserGoals = (currentUserType == 'student' || currentUserType == 'stutor')
         ? ((currentUserProfile?['talents'] as List<dynamic>?) ??
                 (currentUserProfile?['goals'] as List<dynamic>?) ??
                 const <dynamic>[])
             .map((e) => e.toString())
             .toList()
         : const <String>[];
-    final List<String> currentUserTalents = currentUserType == 'trainer'
+    final List<String> currentUserTalents = (currentUserType == 'tutor' || currentUserType == 'stutor')
         ? (currentUserProfile?['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
             const <String>[]
         : const <String>[];
@@ -618,8 +620,8 @@ class ProfileDetailScreen extends StatelessWidget {
         _distanceMetersToProfile(profile, effectiveCurrentUserProfile);
     final distanceLabel = distanceMeters == null ? null : _formatDistance(distanceMeters);
 
-    // Trainer이고 My Profile이 아닌 경우 AppBar에 이름, 거리, 나이대 표시
-    final shouldShowCustomAppBar = !hideAppBar && !isMyProfile && userType == 'trainer';
+    // My Profile이 아닐 때 AppBar에 이름, 나이대, 성별 표시 (tutor/stutor/student 모두)
+    final shouldShowCustomAppBar = !hideAppBar && !isMyProfile;
     
     // AppBar 제목 생성
     Widget? appBarTitle;
@@ -661,6 +663,13 @@ class ProfileDetailScreen extends StatelessWidget {
     }
 
     final isSignedIn = Supabase.instance.client.auth.currentUser != null;
+    // 다른 사람 프로필(My Favorite 등)에서는 버튼·타이틀·행간을 더 컴팩트하게
+    final compactLayout = !isMyProfile;
+    final sectionTitleFontSize = compactLayout ? 16.0 : 20.0;
+    final sectionSpacing = compactLayout ? 14.0 : 24.0;
+    final buttonVerticalPadding = compactLayout ? 12.0 : 16.0;
+    // Tudent의 "I want to learn"용 goals (DB goals 컬럼)
+    final stutorGoals = userType == 'stutor' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
 
     return Scaffold(
       appBar: hideAppBar ? null : AppBar(
@@ -671,28 +680,45 @@ class ProfileDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 프로필 이미지 슬라이더
-            _buildPhotoSlider(context, photos),
+            // 프로필 이미지 슬라이더 (카드 내 아바타와 동일: 20px 라운드 + 좌우 여백)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: _buildPhotoSlider(context, photos),
+              ),
+            ),
 
             // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor') && isSignedIn)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 10.0 : 16.0),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () => _showRequestTrainModal(context),
                     icon: const Icon(Icons.school),
                     label: const Text('Request Training'),
-                    style: _profilePrimaryActionStyle(),
+                    style: _profilePrimaryActionStyle(verticalPadding: buttonVerticalPadding),
                   ),
                 ),
               ),
             
             // Chat history 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor') && isSignedIn)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 0.0),
+                padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 4.0 : 0.0),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -711,15 +737,15 @@ class ProfileDetailScreen extends StatelessWidget {
                     },
                     icon: const Icon(Icons.chat_bubble_outline),
                     label: const Text('Chat history'),
-                    style: _profilePrimaryActionStyle(),
+                    style: _profilePrimaryActionStyle(verticalPadding: buttonVerticalPadding),
                   ),
                 ),
               ),
 
-            // Distance (privacy-friendly) just below "Chat history"
-            if (!hideActionButtons && !isMyProfile && userType == 'trainer' && isSignedIn && distanceLabel != null)
+            // Distance (privacy-friendly) just below photo (tutor/stutor/student, My Favorite 등)
+            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'stutor' || userType == 'student') && isSignedIn && distanceLabel != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                padding: EdgeInsets.fromLTRB(compactLayout ? 16 : 20, compactLayout ? 6 : 10, compactLayout ? 16 : 20, 0),
                 child: Center(
                   child: Text(
                     distanceLabel,
@@ -737,15 +763,13 @@ class ProfileDetailScreen extends StatelessWidget {
             
             // 프로필 정보
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: EdgeInsets.all(compactLayout ? 16.0 : 20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Trainer이고 My Profile이 아닌 경우:
-                  // - 일반 화면에서는 AppBar에 표시하므로 여기서는 제거
-                  // - 하지만 hideAppBar=true(예: 팝업)에서는 AppBar가 없으니 여기서 표시해야 함
-                  if (isMyProfile || userType != 'trainer' || hideAppBar) ...[
-                    // 이름, 대명사, 나이, 거리
+                  // AppBar에 이름/나이/성별을 넣지 않을 때만 본문에 표시 (My Profile 또는 hideAppBar일 때). 시트 등 외부 헤더 사용 시 생략.
+                  if ((isMyProfile || hideAppBar) && !hideNameAgeGenderInBody) ...[
+                    // 이름, 거리
                     Row(
                       children: [
                         Expanded(
@@ -757,7 +781,6 @@ class ProfileDetailScreen extends StatelessWidget {
                             ),
                           ),
                         ),
-                        // 거리 표시
                         if (!isMyProfile && distanceLabel != null) ...[
                           const SizedBox(width: 8),
                           Text(
@@ -791,54 +814,70 @@ class ProfileDetailScreen extends StatelessWidget {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: sectionSpacing),
                   ] else ...[
-                    // Trainer이고 My Profile이 아닌 경우: 이름, 거리, 나이대, 대명사 모두 AppBar에 표시되므로 여기서는 아무것도 표시하지 않음
-                    const SizedBox(height: 24),
+                    // 다른 사람 프로필: 이름·나이대·성별은 AppBar에 표시되므로 본문 생략
+                    SizedBox(height: sectionSpacing),
                   ],
 
                   // About me (Trainer / Trainee 공통)
                   if (aboutMe != null && aboutMe.isNotEmpty) ...[
-                    const Text(
+                    Text(
                       'About me',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compactLayout ? 6 : 8),
                     Text(
                       aboutMe,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        height: 1.5,
+                        height: compactLayout ? 1.35 : 1.5,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: sectionSpacing),
                   ],
                   
-                  // Trainer의 경우: 재능
-                  if (userType == 'trainer' && talents != null && talents.isNotEmpty) ...[
-                    const Text(
-                      'Can Teach',
+                  // Tutor/Stutor: About the lesson (About me 다음)
+                  if ((userType == 'tutor' || userType == 'stutor') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
+                    Text(
+                      'About the lesson',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compactLayout ? 6 : 8),
+                    Text(
+                      experienceDescription,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: compactLayout ? 1.35 : 1.5,
+                      ),
+                    ),
+                    SizedBox(height: sectionSpacing),
+                  ],
+                  
+                  // Tutor/Tudent: I can teach (talents)
+                  if ((userType == 'tutor' || userType == 'stutor') && talents != null && talents.isNotEmpty) ...[
+                    Text(
+                      'I can teach',
+                      style: TextStyle(
+                        fontSize: sectionTitleFontSize,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: compactLayout ? 6 : 8),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 8,
+                      runSpacing: compactLayout ? 6 : 8,
                       children: talents
                           .map((talent) {
                             final talentStr = talent.toString();
-                            // Highlight chips that match the current user's keywords.
-                            // - trainee viewing trainer: goal ↔ talent
-                            // - trainer viewing trainee: talent ↔ goal (handled in Goals section)
-                            // - trainer viewing trainer: talent ↔ talent
                             final matchingNorm =
-                                (currentUserType == 'trainer' && userType == 'trainer')
+                                (currentUserType == 'tutor' || currentUserType == 'stutor') && (userType == 'tutor' || userType == 'stutor')
                                     ? currentUserTalentsNorm
                                     : currentUserGoalsNorm;
                             final isMatched = matchingNorm.contains(_norm(talentStr));
@@ -850,22 +889,48 @@ class ProfileDetailScreen extends StatelessWidget {
                           })
                           .toList(),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: sectionSpacing),
                   ],
                   
-                  // Lesson location (Trainer only)
-                  if (userType == 'trainer' && teachingMethods != null && teachingMethods.isNotEmpty) ...[
-                    const Text(
-                      'Lesson location',
+                  // Stutor 전용: I want to learn (goals 컬럼)
+                  if (userType == 'stutor' && stutorGoals != null && stutorGoals.isNotEmpty) ...[
+                    Text(
+                      'I want to learn',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compactLayout ? 6 : 8),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 8,
+                      runSpacing: compactLayout ? 6 : 8,
+                      children: stutorGoals
+                          .map((goal) {
+                            final goalStr = goal.toString();
+                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'stutor')
+                                ? currentUserTalentsNorm.contains(_norm(goalStr))
+                                : currentUserGoalsNorm.contains(_norm(goalStr));
+                            return _buildProfileChip(context, goalStr, highlighted: isMatched);
+                          })
+                          .toList(),
+                    ),
+                    SizedBox(height: sectionSpacing),
+                  ],
+                  
+                  // Lesson location (Trainer only)
+                  if ((userType == 'tutor' || userType == 'stutor') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
+                    Text(
+                      'Lesson location',
+                      style: TextStyle(
+                        fontSize: sectionTitleFontSize,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: compactLayout ? 6 : 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: compactLayout ? 6 : 8,
                       children: [
                         if (teachingMethods.contains('onsite'))
                           _buildProfileChip(context, 'Onsite', highlighted: false),
@@ -873,31 +938,31 @@ class ProfileDetailScreen extends StatelessWidget {
                           _buildProfileChip(context, 'Online', highlighted: false),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: sectionSpacing),
                   ],
 
                   // Trainer 전용: Tutoring rate / Parent participation
-                  if (userType == 'trainer') ...[
+                  if (userType == 'tutor' || userType == 'stutor') ...[
                     if (tutoringRate != null && tutoringRate.isNotEmpty) ...[
                       Row(
                         children: [
                           Icon(
                             Icons.attach_money,
                             color: Theme.of(context).colorScheme.primary,
-                            size: 20,
+                            size: compactLayout ? 18 : 20,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: compactLayout ? 6 : 8),
                           Text(
                             'Tutoring Rate: \$$tutoringRate/hour',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: compactLayout ? 14 : 16,
                               fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: sectionSpacing),
                     ],
                     if (parentParticipationWelcomed) ...[
                       Row(
@@ -905,84 +970,59 @@ class ProfileDetailScreen extends StatelessWidget {
                           Icon(
                             Icons.family_restroom,
                             color: Theme.of(context).colorScheme.secondary,
-                            size: 20,
+                            size: compactLayout ? 18 : 20,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: compactLayout ? 6 : 8),
                           Text(
                             'Parent participation welcomed',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: compactLayout ? 14 : 16,
                               fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.secondary,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: sectionSpacing),
                     ],
                   ],
                   
-                  // Trainer의 경우: About the lesson (기존 experience_description)
-                  if (userType == 'trainer' && experienceDescription != null && experienceDescription.isNotEmpty) ...[
-                    const Text(
-                      'About the lesson',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                  // Student 전용: I want to learn (talents 컬럼에 goals 저장)
+                  if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
                     Text(
-                      experienceDescription,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  
-                  // Trainee의 경우: Goals (DB 통합: talents 필드 사용)
-                  if (userType == 'trainee' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
-                    const Text(
-                      'Goals',
+                      'I want to learn',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compactLayout ? 6 : 8),
                     Wrap(
                       spacing: 8,
-                      runSpacing: 8,
+                      runSpacing: compactLayout ? 6 : 8,
                       children: traineeGoals
                           .map((goal) {
                             final goalStr = goal.toString();
-                            // 현재 사용자(trainer)의 talents와 매칭되는 goal은 강조
-                            final isMatched = (currentUserType == 'trainer')
+                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'stutor')
                                 ? currentUserTalentsNorm.contains(_norm(goalStr))
                                 : currentUserGoalsNorm.contains(_norm(goalStr));
-                            return _buildProfileChip(
-                              context,
-                              goalStr,
-                              highlighted: isMatched,
-                            );
+                            return _buildProfileChip(context, goalStr, highlighted: isMatched);
                           })
                           .toList(),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: sectionSpacing),
                   ],
                   
                   // Certificates (Trainer만)
-                  if (userType == 'trainer' && certificatePhotos != null && certificatePhotos.isNotEmpty) ...[
-                    const Text(
+                  if ((userType == 'tutor' || userType == 'stutor') && certificatePhotos != null && certificatePhotos.isNotEmpty) ...[
+                    Text(
                       'Certificates / Awards / Degrees',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: compactLayout ? 6 : 8),
                     SizedBox(
                       height: 200,
                       child: ListView.builder(
@@ -1003,7 +1043,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         },
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: sectionSpacing),
                   ],
                 ],
               ),
@@ -1081,9 +1121,9 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                   ),
                   const SizedBox(height: 24),
                   
-                  // Step 1: Skills Selection
+                  // What to learn (skill chips – 테마 대비로 가독성 확보)
                   Text(
-                    'Step 1: Select Skill',
+                    'What to learn',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1094,22 +1134,35 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                     runSpacing: 8,
                     children: widget.availableSkills.map((skill) {
                       final isSelected = _selectedSkill == skill;
+                      final scheme = Theme.of(context).colorScheme;
                       return FilterChip(
-                        label: Text(skill),
+                        label: Text(
+                          skill,
+                          style: TextStyle(
+                            color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                        ),
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
                             _selectedSkill = selected ? skill : null;
                           });
                         },
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        selectedColor: scheme.primary,
+                        checkmarkColor: scheme.onPrimary,
+                        side: BorderSide(
+                          color: isSelected ? scheme.primary : scheme.outline.withOpacity(0.5),
+                        ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 24),
                   
-                  // Step 2: Method Selection
+                  // Lesson Location (method chips)
                   Text(
-                    'Step 2: Select Method',
+                    'Lesson Location',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1120,14 +1173,28 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                     runSpacing: 8,
                     children: widget.availableMethods.map((method) {
                       final isSelected = _selectedMethod == method;
+                      final scheme = Theme.of(context).colorScheme;
+                      final label = method == 'onsite' ? 'Onsite' : 'Online';
                       return FilterChip(
-                        label: Text(method == 'onsite' ? 'Onsite' : 'Online'),
+                        label: Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                        ),
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
                             _selectedMethod = selected ? method : null;
                           });
                         },
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        selectedColor: scheme.primary,
+                        checkmarkColor: scheme.onPrimary,
+                        side: BorderSide(
+                          color: isSelected ? scheme.primary : scheme.outline.withOpacity(0.5),
+                        ),
                       );
                     }).toList(),
                   ),
