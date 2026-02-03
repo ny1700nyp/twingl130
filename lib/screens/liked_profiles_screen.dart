@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../widgets/avatar_with_type_badge.dart';
 import 'public_profile_screen.dart';
 
 class LikedProfilesScreen extends StatefulWidget {
@@ -199,9 +200,11 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
                         final avatar = _avatarProvider(p['main_photo_path'] as String?);
                         return ListTile(
                           key: ValueKey(otherUserId),
-                          leading: CircleAvatar(
+                          leading: AvatarWithTypeBadge(
+                            radius: 22,
+                            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                             backgroundImage: avatar,
-                            child: avatar == null ? const Icon(Icons.person) : null,
+                            userType: p['user_type'] as String?,
                           ),
                           title: Text(name),
                           trailing: IconButton(

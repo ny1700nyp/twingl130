@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -8,14 +8,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
+import '../widgets/avatar_with_type_badge.dart';
 import '../widgets/spark_card.dart';
 import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
 import 'general_settings_screen.dart';
 import 'global_talent_matching_screen.dart';
-import 'my_profile_screen.dart';
-import 'public_profile_screen.dart';
+import 'onboarding_screen.dart';
+import 'profile_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -136,11 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
               ),
             ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right,
-              color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
-            ),
           ],
         ),
       ),
@@ -237,11 +233,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _onSelectSettings(String value) async {
     if (!mounted) return;
     if (value == 'my_profile') {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyProfileScreen()));
       final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await SupabaseService.refreshCurrentUserProfileCache(user.id);
-      }
+      await showProfileDetailSheet(
+        context,
+        profile: SupabaseService.currentUserProfileCache.value,
+        userId: user?.id,
+        isMyProfile: true,
+        currentUserProfile: SupabaseService.currentUserProfileCache.value,
+        onEditPressed: () async {
+          if (user == null || !context.mounted) return;
+          final profile = await SupabaseService.getCurrentUserProfileCached(user.id);
+          if (profile == null || !context.mounted) return;
+          final r = await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => OnboardingScreen(existingProfile: profile)),
+          );
+          if (r == true && context.mounted) {
+            await SupabaseService.refreshCurrentUserProfileCache(user.id);
+          }
+        },
+      );
     } else if (value == 'edit_trainers') {
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditTrainersScreen()));
       // No forced DB refresh here; Edit screen updates cache optimistically.
@@ -316,11 +326,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    leading: CircleAvatar(
+                    leading: AvatarWithTypeBadge(
                       radius: 22,
                       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       backgroundImage: avatar,
-                      child: avatar == null ? const Icon(Icons.person) : null,
+                      userType: profile?['user_type'] as String?,
                     ),
                     title: Text(name?.isNotEmpty == true ? name! : 'My Profile'),
                     onTap: () => _onSelectSettings('my_profile'),
@@ -462,10 +472,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   return ListTile(
                     key: ValueKey(userId),
-                        leading: CircleAvatar(
+                        leading: AvatarWithTypeBadge(
+                          radius: 22,
                           backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                           backgroundImage: avatar,
-                          child: avatar == null ? const Icon(Icons.person) : null,
+                          userType: p['user_type'] as String?,
                         ),
                         title: Text(name?.isNotEmpty == true ? name! : 'Unknown'),
                         subtitle: aboutMe.isNotEmpty
@@ -482,13 +493,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         isThreeLine: aboutMe.isNotEmpty,
                         onTap: userId.isEmpty
                             ? null
-                            : () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => PublicProfileScreen(
-                                      userId: userId,
-                                      currentUserProfile: SupabaseService.currentUserProfileCache.value,
-                                    ),
-                                  ),
+                            : () => showProfileDetailSheet(
+                                  context,
+                                  userId: userId,
+                                  currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                  hideActionButtons: false,
+                                  hideDistance: true,
                                 ),
                       );
                     },

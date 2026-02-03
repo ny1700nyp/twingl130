@@ -13,7 +13,7 @@ import '../services/supabase_service.dart';
 import '../utils/time_utils.dart';
 import '../widgets/category_selector_widget.dart';
 
-enum _OnboardingStepKey { basic, topics, lessonInfo, photos, waivers }
+enum _OnboardingStepKey { basic, topics, lessonInfo, goals, photos, waivers }
 
 class OnboardingScreen extends StatefulWidget {
   final String? initialUserType;
@@ -41,6 +41,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // Editable
   List<String> _talentsOrGoals = [];
+  /// Twiner 전용: "What do you want to learn?" (Lesson info 다음 스텝)
+  List<String> _goalsForTwiner = [];
   final Set<String> _lessonLocations = <String>{}; // onsite/online
   final _aboutMeController = TextEditingController();
   final _aboutLessonController = TextEditingController(); // maps to experience_description
@@ -167,8 +169,10 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       final userType = (existing['user_type'] as String?)?.trim().toLowerCase() ?? '';
       if (userType == 'student') {
         if (initType == 'twiner') {
-          // Student→Twiner: "What can you teach?"(talents) 입력. 학생은 talents 없음
+          // Student→Twiner: "What can you teach?"(talents) 입력. 학생은 talents 없음; goals는 다음 스텝에서 입력
           _talentsOrGoals = (existing['talents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+          final goals = (existing['goals'] as List<dynamic>?)?.map((e) => e.toString()).toList();
+          if (goals != null) _goalsForTwiner = goals;
         } else {
           final goals = (existing['goals'] as List<dynamic>?) ?? (existing['talents'] as List<dynamic>?);
           if (goals != null) _talentsOrGoals = goals.map((e) => e.toString()).toList();
@@ -182,6 +186,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         } else {
           if (talents != null) _talentsOrGoals = talents.map((e) => e.toString()).toList();
         }
+        if (goals != null) _goalsForTwiner = goals.map((e) => e.toString()).toList();
       } else if (userType == 'tutor' && initType == 'twiner') {
         // Tutor→Twiner 전환: "What do you want to learn?"(goals)만 입력. 기존 goals 있으면 로드
         final goals = (existing['goals'] as List<dynamic>?)?.map((e) => e.toString()).toList();
@@ -572,10 +577,13 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     final isTutor = type == 'tutor' || type == 'twiner';
     // Tutor→Twiner 전환 시에만 Lesson info 스킵. Student→Twiner는 Lesson info 포함
     final includeLessonInfo = isTutor && !_isTwinerFromTutor;
+    // Twiner(기존 편집·Student→Twiner): Lesson info 다음에 "What do you want to learn?" 스텝
+    final includeGoalsForTwiner = type == 'twiner' && includeLessonInfo;
     return <_OnboardingStepKey>[
       _OnboardingStepKey.basic,
       _OnboardingStepKey.topics,
       if (includeLessonInfo) _OnboardingStepKey.lessonInfo,
+      if (includeGoalsForTwiner) _OnboardingStepKey.goals,
       _OnboardingStepKey.photos,
       if (!_isEdit || _isTwinerConversion) _OnboardingStepKey.waivers,
     ];
@@ -615,6 +623,12 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         }
         if (int.tryParse(rate) == null) {
           _snack('Tutoring rate must be a number.');
+          return false;
+        }
+        return true;
+      case _OnboardingStepKey.goals:
+        if (_goalsForTwiner.isEmpty) {
+          _snack('Please select at least 1 topic for what you want to learn.');
           return false;
         }
         return true;
@@ -715,14 +729,19 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         payload['tutoring_rate'] = existing['tutoring_rate'];
       }
 
-      // Student→Twiner 전환: talents + Lesson info 새로 넣고, goals는 기존 값 유지
+      // Student→Twiner 전환: talents + Lesson info + goals(What do you want to learn?) 새로 넣기
       if (_isTwinerFromStudent && existing != null) {
         payload['talents'] = _talentsOrGoals;
-        payload['goals'] = existing['goals'] ?? <dynamic>[];
+        payload['goals'] = _goalsForTwiner;
         payload['teaching_methods'] = _lessonLocations.toList();
         payload['experience_description'] = _aboutLessonController.text.trim().isEmpty ? null : _aboutLessonController.text.trim();
         payload['parent_participation_welcomed'] = _parentParticipationWelcomed;
         payload['tutoring_rate'] = _rateController.text.trim().isEmpty ? null : _rateController.text.trim();
+      }
+
+      // 기존 Twiner 편집: goals 스텝 값 반영
+      if (fixedUserType == 'twiner' && !_isTwinerFromTutor && !_isTwinerFromStudent) {
+        payload['goals'] = _goalsForTwiner;
       }
 
       // Optional: if DB has birthdate column, store it.
@@ -1134,6 +1153,27 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     title: const Text('Parent participation welcomed (optional)'),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ),
+          );
+          break;
+
+        case _OnboardingStepKey.goals:
+          steps.add(
+            Step(
+              title: const Text('What do you want to learn?'),
+              isActive: isActive,
+              state: state,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CategorySelectorWidget(
+                    selectedItems: _goalsForTwiner,
+                    onSelectionChanged: (v) => setState(() => _goalsForTwiner = v),
+                    title: 'What do you want to learn?',
+                    hint: 'Select 1–6.',
                   ),
                 ],
               ),

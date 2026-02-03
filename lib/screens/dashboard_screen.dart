@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
 import '../utils/time_utils.dart';
+import '../widgets/avatar_with_type_badge.dart';
 import 'chat_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -212,36 +213,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return text.substring(m.end).trim();
   }
 
-  Widget _roleIconBadge({required bool isTutor}) {
-    const tutorGold = Color(0xFFF59E0B);
-    const studentBlue = Color(0xFF4285F4); // Google blue
-    final bg = isTutor ? tutorGold : studentBlue;
-    final label = isTutor ? 'T' : 'S';
-
-    return Positioned(
-      right: -1,
-      top: -1,
-      child: Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          color: bg,
-          shape: BoxShape.circle,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 11,
-            height: 1,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _statusChip(String status) {
     final s = status.trim().toLowerCase();
     if (s == 'accepted' || s.isEmpty) return const SizedBox.shrink();
@@ -358,9 +329,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final status = _normalizedStatus(c);
                 final isDeclined = status == 'declined';
                 final rightTime = _formatRightCornerTime(c);
-                final isRequester = (c['is_requester'] as bool?) ?? false;
-                // If I requested, the other user is the tutor (trainer). Otherwise, the other user is the student (trainee).
-                final isOtherTutor = isRequester;
                 final otherUserId = (c['other_user_id'] as String?) ??
                     (otherProfile?['user_id'] as String?) ??
                     '';
@@ -368,15 +336,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 return ListTile(
                   key: ValueKey(conversationId),
                   tileColor: isDeclined ? Colors.red.withAlpha(18) : null,
-                  leading: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: avatar,
-                        child: avatar == null ? const Icon(Icons.person) : null,
-                      ),
-                      _roleIconBadge(isTutor: isOtherTutor),
-                    ],
+                  leading: AvatarWithTypeBadge(
+                    radius: 22,
+                    backgroundImage: avatar,
+                    userType: otherProfile?['user_type'] as String?,
                   ),
                   title: Row(
                     children: [

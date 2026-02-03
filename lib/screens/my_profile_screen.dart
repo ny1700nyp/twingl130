@@ -77,18 +77,20 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
       );
     }
 
+    // 채팅에서 이름 탭 시 나오는 프로필과 동일 형식: AppBar에 이름·나이·성별, 본문 컴팩트 레이아웃
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        actions: [
+      body: ProfileDetailScreen(
+        profile: _profile!,
+        hideAppBar: false,
+        currentUserProfile: _profile,
+        appBarActions: [
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit_outlined),
             onPressed: _navigateToEdit,
             tooltip: 'Edit Profile',
           ),
         ],
       ),
-      body: ProfileDetailScreen(profile: _profile!, hideAppBar: true),
     );
   }
 }

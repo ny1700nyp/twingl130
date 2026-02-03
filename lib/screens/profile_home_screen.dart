@@ -11,8 +11,8 @@ import '../services/supabase_service.dart';
 import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
-import 'my_profile_screen.dart';
-import 'public_profile_screen.dart';
+import 'onboarding_screen.dart';
+import 'profile_detail_screen.dart';
 
 class ProfileHomeScreen extends StatefulWidget {
   const ProfileHomeScreen({super.key});
@@ -152,11 +152,25 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
 
   Future<void> _onSelectMenu(String value) async {
     if (value == 'my_profile') {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyProfileScreen()));
       final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await SupabaseService.refreshCurrentUserProfileCache(user.id);
-      }
+      await showProfileDetailSheet(
+        context,
+        profile: SupabaseService.currentUserProfileCache.value,
+        userId: user?.id,
+        isMyProfile: true,
+        currentUserProfile: SupabaseService.currentUserProfileCache.value,
+        onEditPressed: () async {
+          if (user == null || !context.mounted) return;
+          final profile = await SupabaseService.getCurrentUserProfileCached(user.id);
+          if (profile == null || !context.mounted) return;
+          final r = await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => OnboardingScreen(existingProfile: profile)),
+          );
+          if (r == true && context.mounted) {
+            await SupabaseService.refreshCurrentUserProfileCache(user.id);
+          }
+        },
+      );
     } else if (value == 'nearby') {
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FindNearbyTalentScreen()));
     } else if (value == 'edit_trainers') {
@@ -251,13 +265,12 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                         onTap: () {
                           final userId = profile['user_id'] as String?;
                           if (userId == null) return;
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => PublicProfileScreen(
-                                userId: userId,
-                                currentUserProfile: SupabaseService.currentUserProfileCache.value,
-                              ),
-                            ),
+                          showProfileDetailSheet(
+                            context,
+                            userId: userId,
+                            currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                            hideActionButtons: false,
+                            hideDistance: true,
                           );
                         },
                       ),
@@ -304,13 +317,12 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                       subtitle: Text(userId),
                       onTap: userId.isEmpty
                           ? null
-                          : () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => PublicProfileScreen(
-                                    userId: userId,
-                                    currentUserProfile: SupabaseService.currentUserProfileCache.value,
-                                  ),
-                                ),
+                          : () => showProfileDetailSheet(
+                                context,
+                                userId: userId,
+                                currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                hideActionButtons: false,
+                                hideDistance: true,
                               ),
                     );
                   },

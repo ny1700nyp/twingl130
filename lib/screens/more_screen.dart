@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/supabase_service.dart';
-import '../theme/app_theme.dart';
-import 'edit_trainers_screen.dart';
-import 'general_settings_screen.dart';
-import 'my_profile_screen.dart';
 import 'onboarding_screen.dart';
 
 class MoreScreen extends StatefulWidget {
@@ -46,39 +43,6 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
-  Future<void> _onSelectMore(String value) async {
-    if (!mounted) return;
-    if (value == 'my_profile') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const MyProfileScreen()),
-      );
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await SupabaseService.refreshCurrentUserProfileCache(user.id);
-      }
-    } else if (value == 'edit_trainers') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const EditTrainersScreen()),
-      );
-    } else if (value == 'general_settings') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
-      );
-    } else if (value == 'logout') {
-      final nav = Navigator.of(context);
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await Supabase.instance.client.auth.signOut();
-      } catch (e) {
-        if (!mounted) return;
-        messenger.showSnackBar(SnackBar(content: Text('Logout failed: $e')));
-      }
-      SupabaseService.clearInMemoryCaches();
-      if (!mounted) return;
-      nav.pushReplacementNamed('/login');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -114,40 +78,8 @@ class _MoreScreenState extends State<MoreScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // My Profile
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: const Text('My Profile'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _onSelectMore('my_profile'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.favorite_border),
-                title: const Text('Edit my Favorite'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _onSelectMore('edit_trainers'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: const Text('General Settings'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _onSelectMore('general_settings'),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: Icon(
-                  Icons.logout,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                title: Text(
-                  'Log out',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-                onTap: () => _onSelectMore('logout'),
-              ),
+              // Lesson Space Finder
+              const _LessonSpaceFinderCard(),
             ],
           );
         },
@@ -255,8 +187,8 @@ class _TwinerConversionCard extends StatelessWidget {
                     : Icon(isTutor ? Icons.school_outlined : Icons.groups_outlined),
                 label: Text(converting ? 'Starting…' : buttonLabel),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.twinglGreen,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
@@ -272,6 +204,128 @@ class _TwinerConversionCard extends StatelessWidget {
               const SizedBox(height: 10),
               _previewRow(context, icon: Icons.school_outlined, title: 'Student Candidates in the area'),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lesson Space Finder: 2x2 grid of links to library, school, studio, meeting room platforms.
+class _LessonSpaceFinderCard extends StatelessWidget {
+  const _LessonSpaceFinderCard();
+
+  static const double _gridSpacing = 12;
+  static const double _gridGap = 12;
+
+  Future<void> _openUrl(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    try {
+      await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link.')),
+        );
+      }
+    }
+  }
+
+  Widget _gridTile(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String url,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withOpacity(0.6),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => _openUrl(context, url),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 32, color: iconColor),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Lesson Space Finder',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: _gridSpacing,
+              crossAxisSpacing: _gridGap,
+              childAspectRatio: 0.95,
+              children: [
+                _gridTile(
+                  context,
+                  icon: Icons.local_library,
+                  iconColor: Colors.blue,
+                  label: 'Public Libraries',
+                  url: 'https://www.google.com/search?q=library+room+reservation',
+                ),
+                _gridTile(
+                  context,
+                  icon: Icons.school,
+                  iconColor: Colors.green,
+                  label: 'School Facilities',
+                  url: 'https://www.facilitron.com/',
+                ),
+                _gridTile(
+                  context,
+                  icon: Icons.camera_indoor,
+                  iconColor: Colors.red.shade400,
+                  label: 'Creative Studios',
+                  url: 'https://www.peerspace.com/',
+                ),
+                _gridTile(
+                  context,
+                  icon: Icons.meeting_room,
+                  iconColor: Colors.indigo.shade700,
+                  label: 'Meeting Rooms',
+                  url: 'https://liquidspace.com/',
+                ),
+              ],
+            ),
           ],
         ),
       ),

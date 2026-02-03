@@ -19,6 +19,10 @@ class ProfileDetailScreen extends StatelessWidget {
   final bool hideActionButtons;
   /// When true (e.g. in chat profile sheet), do not show name/age/gender block in body.
   final bool hideNameAgeGenderInBody;
+  /// Optional actions for the AppBar (e.g. Edit for my profile).
+  final List<Widget>? appBarActions;
+  /// When true, hide the distance label below Chat history (e.g. My Favorite detail).
+  final bool hideDistance;
 
   const ProfileDetailScreen({
     super.key,
@@ -27,6 +31,8 @@ class ProfileDetailScreen extends StatelessWidget {
     this.currentUserProfile,
     this.hideActionButtons = false,
     this.hideNameAgeGenderInBody = false,
+    this.appBarActions,
+    this.hideDistance = false,
   });
 
   String _getPronouns(String? gender) {
@@ -163,6 +169,7 @@ class ProfileDetailScreen extends StatelessWidget {
         fit: BoxFit.cover,
         height: 300,
         width: double.infinity,
+        gaplessPlayback: true,
         errorBuilder: (ctx, error, stackTrace) {
           return Container(
             height: 300,
@@ -184,6 +191,7 @@ class ProfileDetailScreen extends StatelessWidget {
         fit: BoxFit.cover,
         height: 300,
         width: double.infinity,
+        gaplessPlayback: true,
         errorBuilder: (ctx, error, stackTrace) {
           return Container(
             height: 300,
@@ -435,10 +443,12 @@ class ProfileDetailScreen extends StatelessWidget {
       );
     }
 
-    // 여러 사진이면 PageView 슬라이더 사용 (공유 버튼 포함)
+    // 여러 사진이면 PageView 슬라이더 사용 (공유 버튼 포함). key로 재빌드 시 상태 유지.
+    final sliderKey = ValueKey<String>(photos.isEmpty ? '' : photos.first);
     return Stack(
       children: [
         _PhotoSliderWidget(
+          key: sliderKey,
           photos: photos,
           buildImage: (imagePath) => _buildProfileImage(context, imagePath),
         ),
@@ -620,8 +630,8 @@ class ProfileDetailScreen extends StatelessWidget {
         _distanceMetersToProfile(profile, effectiveCurrentUserProfile);
     final distanceLabel = distanceMeters == null ? null : _formatDistance(distanceMeters);
 
-    // My Profile이 아닐 때 AppBar에 이름, 나이대, 성별 표시 (tutor/twiner/student 모두)
-    final shouldShowCustomAppBar = !hideAppBar && !isMyProfile;
+    // AppBar에 이름·나이대·성별 표시 (다른 사람 프로필 + 내 프로필 동일 형식)
+    final shouldShowCustomAppBar = !hideAppBar;
     
     // AppBar 제목 생성
     Widget? appBarTitle;
@@ -663,11 +673,10 @@ class ProfileDetailScreen extends StatelessWidget {
     }
 
     final isSignedIn = Supabase.instance.client.auth.currentUser != null;
-    // 다른 사람 프로필(My Favorite 등)에서는 버튼·타이틀·행간을 더 컴팩트하게
-    final compactLayout = !isMyProfile;
-    final sectionTitleFontSize = compactLayout ? 16.0 : 20.0;
-    final sectionSpacing = compactLayout ? 14.0 : 24.0;
-    final buttonVerticalPadding = compactLayout ? 12.0 : 16.0;
+    // 모든 프로필(내 프로필·채팅 이름 탭·My Favorite 등) 동일한 컴팩트 레이아웃
+    const double sectionTitleFontSize = 16.0;
+    const double sectionSpacing = 14.0;
+    const double buttonVerticalPadding = 12.0;
     // Tudent의 "I want to learn"용 goals (DB goals 컬럼)
     final twinerGoals = userType == 'twiner' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
 
@@ -675,35 +684,38 @@ class ProfileDetailScreen extends StatelessWidget {
       appBar: hideAppBar ? null : AppBar(
         title: appBarTitle,
         elevation: 0,
+        actions: appBarActions ?? const <Widget>[],
       ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 프로필 이미지 슬라이더 (카드 내 아바타와 동일: 20px 라운드 + 좌우 여백)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                clipBehavior: Clip.antiAlias,
-                child: _buildPhotoSlider(context, photos),
+            // 프로필 이미지 슬라이더 (시트 드래그 시 깜빡임 방지: RepaintBoundary로 격리)
+            RepaintBoundary(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  clipBehavior: Clip.antiAlias,
+                  child: _buildPhotoSlider(context, photos),
+                ),
               ),
             ),
 
             // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
             if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 10.0 : 16.0),
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -718,7 +730,7 @@ class ProfileDetailScreen extends StatelessWidget {
             // Chat history 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
             if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: compactLayout ? 16.0 : 20.0, vertical: compactLayout ? 4.0 : 0.0),
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -742,10 +754,10 @@ class ProfileDetailScreen extends StatelessWidget {
                 ),
               ),
 
-            // Distance (privacy-friendly) just below photo (tutor/twiner/student, My Favorite 등)
-            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner' || userType == 'student') && isSignedIn && distanceLabel != null)
+            // Distance (privacy-friendly) just below Chat history (생략: My Favorite detail 등 hideDistance 시)
+            if (!hideDistance && !hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner' || userType == 'student') && isSignedIn && distanceLabel != null)
               Padding(
-                padding: EdgeInsets.fromLTRB(compactLayout ? 16 : 20, compactLayout ? 6 : 10, compactLayout ? 16 : 20, 0),
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
                 child: Center(
                   child: Text(
                     distanceLabel,
@@ -763,20 +775,19 @@ class ProfileDetailScreen extends StatelessWidget {
             
             // 프로필 정보
             Padding(
-              padding: EdgeInsets.all(compactLayout ? 16.0 : 20.0),
+              padding: EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // AppBar에 이름/나이/성별을 넣지 않을 때만 본문에 표시 (My Profile 또는 hideAppBar일 때). 시트 등 외부 헤더 사용 시 생략.
-                  if ((isMyProfile || hideAppBar) && !hideNameAgeGenderInBody) ...[
-                    // 이름, 거리
+                  // AppBar가 없을 때만 본문에 이름·나이·성별 표시 (hideAppBar일 때). 채팅/다른 프로필과 동일 형식(18/14px).
+                  if (hideAppBar && !hideNameAgeGenderInBody) ...[
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             name,
                             style: const TextStyle(
-                              fontSize: 28,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -797,8 +808,8 @@ class ProfileDetailScreen extends StatelessWidget {
                           Text(
                             _getPronouns(gender),
                             style: TextStyle(
-                              fontSize: 16,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                             ),
                           ),
                         ],
@@ -806,9 +817,9 @@ class ProfileDetailScreen extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             _formatAgeRange(age, profile['created_at'] as String?),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                             ),
                           ),
                         ],
@@ -816,7 +827,6 @@ class ProfileDetailScreen extends StatelessWidget {
                     ),
                     SizedBox(height: sectionSpacing),
                   ] else ...[
-                    // 다른 사람 프로필: 이름·나이대·성별은 AppBar에 표시되므로 본문 생략
                     SizedBox(height: sectionSpacing),
                   ],
 
@@ -829,12 +839,12 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Text(
                       aboutMe,
                       style: TextStyle(
                         fontSize: 14,
-                        height: compactLayout ? 1.35 : 1.5,
+                        height: 1.35,
                       ),
                     ),
                     SizedBox(height: sectionSpacing),
@@ -849,12 +859,12 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Text(
                       experienceDescription,
                       style: TextStyle(
                         fontSize: 14,
-                        height: compactLayout ? 1.35 : 1.5,
+                        height: 1.35,
                       ),
                     ),
                     SizedBox(height: sectionSpacing),
@@ -869,10 +879,10 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
-                      runSpacing: compactLayout ? 6 : 8,
+                      runSpacing: 6,
                       children: talents
                           .map((talent) {
                             final talentStr = talent.toString();
@@ -884,7 +894,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             return _buildProfileChip(
                               context,
                               talentStr,
-                              highlighted: isMatched,
+                              highlighted: isMatched && !isMyProfile,
                             );
                           })
                           .toList(),
@@ -901,17 +911,17 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
-                      runSpacing: compactLayout ? 6 : 8,
+                      runSpacing: 6,
                       children: twinerGoals
                           .map((goal) {
                             final goalStr = goal.toString();
                             final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
                                 ? currentUserTalentsNorm.contains(_norm(goalStr))
                                 : currentUserGoalsNorm.contains(_norm(goalStr));
-                            return _buildProfileChip(context, goalStr, highlighted: isMatched);
+                            return _buildProfileChip(context, goalStr, highlighted: isMatched && !isMyProfile);
                           })
                           .toList(),
                     ),
@@ -927,10 +937,10 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
-                      runSpacing: compactLayout ? 6 : 8,
+                      runSpacing: 6,
                       children: [
                         if (teachingMethods.contains('onsite'))
                           _buildProfileChip(context, 'Onsite', highlighted: false),
@@ -949,13 +959,13 @@ class ProfileDetailScreen extends StatelessWidget {
                           Icon(
                             Icons.attach_money,
                             color: Theme.of(context).colorScheme.primary,
-                            size: compactLayout ? 18 : 20,
+                            size: 18,
                           ),
-                          SizedBox(width: compactLayout ? 6 : 8),
+                          const SizedBox(width: 6),
                           Text(
                             'Tutoring Rate: \$$tutoringRate/hour',
                             style: TextStyle(
-                              fontSize: compactLayout ? 14 : 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.onSurface,
                             ),
@@ -970,13 +980,13 @@ class ProfileDetailScreen extends StatelessWidget {
                           Icon(
                             Icons.family_restroom,
                             color: Theme.of(context).colorScheme.secondary,
-                            size: compactLayout ? 18 : 20,
+                            size: 18,
                           ),
-                          SizedBox(width: compactLayout ? 6 : 8),
+                          const SizedBox(width: 6),
                           Text(
                             'Parent participation welcomed',
                             style: TextStyle(
-                              fontSize: compactLayout ? 14 : 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.secondary,
                             ),
@@ -996,17 +1006,17 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
-                      runSpacing: compactLayout ? 6 : 8,
+                      runSpacing: 6,
                       children: traineeGoals
                           .map((goal) {
                             final goalStr = goal.toString();
                             final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
                                 ? currentUserTalentsNorm.contains(_norm(goalStr))
                                 : currentUserGoalsNorm.contains(_norm(goalStr));
-                            return _buildProfileChip(context, goalStr, highlighted: isMatched);
+                            return _buildProfileChip(context, goalStr, highlighted: isMatched && !isMyProfile);
                           })
                           .toList(),
                     ),
@@ -1022,7 +1032,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: compactLayout ? 6 : 8),
+                    const SizedBox(height: 6),
                     SizedBox(
                       height: 200,
                       child: ListView.builder(
@@ -1276,6 +1286,7 @@ class _PhotoSliderWidget extends StatefulWidget {
   final Widget Function(String) buildImage;
 
   const _PhotoSliderWidget({
+    super.key,
     required this.photos,
     required this.buildImage,
   });
@@ -1340,6 +1351,245 @@ class _PhotoSliderWidgetState extends State<_PhotoSliderWidget> {
                 ),
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- 슬라이드업 프로필 시트 (채팅 이름 탭과 동일 형식) ---
+
+String _sheetFormatAgeRange(int? age, String? createdAt) {
+  if (age == null) return '';
+  int currentYear = DateTime.now().year;
+  int registrationYear = currentYear;
+  if (createdAt != null) {
+    try {
+      registrationYear = DateTime.parse(createdAt).year;
+    } catch (_) {}
+  }
+  int currentAge = age + (currentYear - registrationYear);
+  int ageRange = (currentAge ~/ 10) * 10;
+  return '${ageRange}s';
+}
+
+String _sheetGenderLabel(String? gender) {
+  if (gender == null) return '';
+  final g = gender.trim();
+  if (g.isEmpty || g == 'Prefer not to say') return '';
+  switch (g) {
+    case 'man': return 'Man';
+    case 'woman': return 'Woman';
+    case 'non-binary': return 'Non-binary';
+    default: return g;
+  }
+}
+
+double? _sheetDistanceMeters(Map<String, dynamic> otherProfile, Map<String, dynamic>? currentUserProfile) {
+  final cached = SupabaseService.lastKnownLocation.value;
+  final myLat = cached?.lat ?? (currentUserProfile?['latitude'] as num?)?.toDouble();
+  final myLon = cached?.lon ?? (currentUserProfile?['longitude'] as num?)?.toDouble();
+  if (myLat == null || myLon == null) return null;
+  final lat = (otherProfile['latitude'] as num?)?.toDouble();
+  final lon = (otherProfile['longitude'] as num?)?.toDouble();
+  if (lat == null || lon == null) return null;
+  return Geolocator.distanceBetween(myLat, myLon, lat, lon);
+}
+
+/// 채팅에서 이름 탭 시와 동일한 슬라이드업 시트로 프로필을 연다.
+/// [profile]이 있으면 바로 표시, 없으면 [userId]로 로드한다. [isMyProfile]이 true면 편집 버튼을 노출한다.
+Future<void> showProfileDetailSheet(
+  BuildContext context, {
+  Map<String, dynamic>? profile,
+  String? userId,
+  bool isMyProfile = false,
+  VoidCallback? onEditPressed,
+  bool hideActionButtons = true,
+  bool hideDistance = false,
+  Map<String, dynamic>? currentUserProfile,
+}) async {
+  final effectiveCurrent = currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      final media = MediaQuery.of(ctx);
+      final h = media.size.height;
+      final topPadding = media.padding.top;
+      final sheetHeight = (h - topPadding - 24).clamp(400.0, h * 0.88);
+      final surface = Theme.of(ctx).colorScheme.surface;
+      return Padding(
+        padding: EdgeInsets.only(top: topPadding + 8, left: 12, right: 12, bottom: 12),
+        child: Material(
+          color: surface,
+          elevation: 10,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: sheetHeight,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.onSurface.withAlpha(80),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Flexible(
+                  child: profile != null
+                      ? _ProfileSheetBody(
+                          profile: profile,
+                          isMyProfile: isMyProfile,
+                          onEditPressed: onEditPressed,
+                          hideActionButtons: hideActionButtons,
+                          hideDistance: hideDistance,
+                          currentUserProfile: effectiveCurrent,
+                        )
+                      : (userId != null
+                          ? FutureBuilder<Map<String, dynamic>?>(
+                              future: isMyProfile
+                                  ? SupabaseService.getCurrentUserProfileCached(userId)
+                                  : SupabaseService.getPublicProfile(userId),
+                              builder: (context, snap) {
+                                if (snap.connectionState == ConnectionState.waiting) {
+                                  return const Center(child: CircularProgressIndicator());
+                                }
+                                if (snap.hasError) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Text('Failed to load profile: ${snap.error}'),
+                                    ),
+                                  );
+                                }
+                                final p = snap.data;
+                                if (p == null) {
+                                  return const Center(child: Text('Profile not found'));
+                                }
+                                final withDistance = Map<String, dynamic>.from(p);
+                                final meters = _sheetDistanceMeters(withDistance, effectiveCurrent);
+                                if (meters != null) {
+                                  withDistance['distance_meters'] = meters;
+                                }
+                                return _ProfileSheetBody(
+                                  profile: withDistance,
+                                  isMyProfile: isMyProfile,
+                                  onEditPressed: onEditPressed,
+                                  hideActionButtons: hideActionButtons,
+                                  hideDistance: hideDistance,
+                                  currentUserProfile: effectiveCurrent,
+                                );
+                              },
+                            )
+                          : const Center(child: Text('Profile not found'))),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _ProfileSheetBody extends StatelessWidget {
+  const _ProfileSheetBody({
+    required this.profile,
+    required this.isMyProfile,
+    this.onEditPressed,
+    required this.hideActionButtons,
+    this.hideDistance = false,
+    this.currentUserProfile,
+  });
+
+  final Map<String, dynamic> profile;
+  final bool isMyProfile;
+  final VoidCallback? onEditPressed;
+  final bool hideActionButtons;
+  final bool hideDistance;
+  final Map<String, dynamic>? currentUserProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = profile['name'] as String? ?? 'Unknown';
+    final age = profile['age'] as int?;
+    final gender = profile['gender'] as String?;
+    final createdAt = profile['created_at'] as String?;
+    final distanceMeters = (profile['distance_meters'] as num?)?.toDouble() ??
+        _sheetDistanceMeters(profile, currentUserProfile);
+    final distanceStr = distanceMeters != null ? formatDistanceMeters(distanceMeters) : null;
+    final ageStr = _sheetFormatAgeRange(age, createdAt);
+    final genderStr = _sheetGenderLabel(gender);
+    final subParts = <String>[
+      if (distanceStr != null && distanceStr.isNotEmpty) distanceStr,
+      if (ageStr.isNotEmpty) ageStr,
+      if (genderStr.isNotEmpty) genderStr,
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (subParts.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subParts.join('  •  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (isMyProfile && onEditPressed != null)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onEditPressed?.call();
+                  },
+                  tooltip: 'Edit Profile',
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: ProfileDetailScreen(
+            profile: profile,
+            hideAppBar: true,
+            hideActionButtons: hideActionButtons,
+            hideNameAgeGenderInBody: true,
+            hideDistance: hideDistance,
+            currentUserProfile: currentUserProfile,
           ),
         ),
       ],
