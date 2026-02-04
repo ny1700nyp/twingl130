@@ -210,7 +210,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     // 프로필(캐시)과 스와이프 목록을 동시에 요청해 대기 시간 단축
     final cacheAndSwiped = await Future.wait(<Future<dynamic>>[
       SupabaseService.getCurrentUserProfileCached(user.id),
-      SupabaseService.getSwipedUserIds(user.id),
+      SupabaseService.getLikedUserIds(user.id),
     ]);
     var myProfile = cacheAndSwiped[0] as Map<String, dynamic>?;
     final swipedIds = cacheAndSwiped[1] as Set<String>;

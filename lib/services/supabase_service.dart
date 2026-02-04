@@ -1223,7 +1223,7 @@ class SupabaseService {
     return (goalTalent: goalTalent, talentGoal: talentGoal);
   }
 
-  /// Fetches swiped user ids for a user (for parallel use with profile/card loading).
+  /// Fetches all swiped user ids (like + dislike). Use getLikedUserIds for card deck exclusion so disliked users can reappear.
   static Future<Set<String>> getSwipedUserIds(String currentUserId) async {
     try {
       final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
@@ -1233,6 +1233,25 @@ class SupabaseService {
         if (id != null && id.isNotEmpty) swipedIds.add(id);
       }
       return swipedIds;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Fetches only liked user ids (is_match = true). Used to exclude from card deck; disliked users can show again on refresh.
+  static Future<Set<String>> getLikedUserIds(String currentUserId) async {
+    try {
+      final rows = await supabase
+          .from('matches')
+          .select('swiped_user_id')
+          .eq('user_id', currentUserId)
+          .eq('is_match', true);
+      final ids = <String>{};
+      for (final e in rows) {
+        final id = (e as Map)['swiped_user_id'] as String?;
+        if (id != null && id.isNotEmpty) ids.add(id);
+      }
+      return ids;
     } catch (_) {
       return {};
     }
@@ -1260,17 +1279,17 @@ class SupabaseService {
           .limit(200);
 
       final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
         profilesFuture,
       ]);
-      final swipedIds = results[0] as Set<String>;
+      final likedIds = results[0] as Set<String>;
       final response = results[1];
 
       final list = (response as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !swipedIds.contains(id);
+            return id.isNotEmpty && !likedIds.contains(id);
           })
           .toList();
 
@@ -1315,12 +1334,7 @@ class SupabaseService {
     int limit = 30,
   }) async {
     try {
-      final swiped = await supabase.from('matches').select('swiped_user_id').eq('user_id', currentUserId);
-      final swipedIds = <String>{};
-      for (final e in swiped) {
-        final id = (e as Map)['swiped_user_id'] as String?;
-        if (id != null && id.isNotEmpty) swipedIds.add(id);
-      }
+      final swipedIds = await getLikedUserIds(currentUserId);
       final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
       final response = await supabase
@@ -1371,17 +1385,17 @@ class SupabaseService {
           .limit(200);
 
       final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
         profilesFuture,
       ]);
-      final swipedIds = results[0] as Set<String>;
+      final likedIds = results[0] as Set<String>;
       final response = results[1];
 
       final list = (response as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !swipedIds.contains(id);
+            return id.isNotEmpty && !likedIds.contains(id);
           })
           .toList();
 
@@ -1440,17 +1454,17 @@ class SupabaseService {
           .limit(200);
 
       final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
         profilesFuture,
       ]);
-      final swipedIds = results[0] as Set<String>;
+      final likedIds = results[0] as Set<String>;
       final response = results[1];
 
       final list = (response as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !swipedIds.contains(id);
+            return id.isNotEmpty && !likedIds.contains(id);
           })
           .toList();
 
@@ -1508,10 +1522,10 @@ class SupabaseService {
           .limit(limit);
 
       final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getSwipedUserIds(currentUserId),
+        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
         profilesFuture,
       ]);
-      final swipedIds = results[0] as Set<String>;
+      final likedIds = results[0] as Set<String>;
       final response = results[1];
 
       final keywords = userTalentsOrGoals.map((e) => e.toLowerCase().trim()).where((e) => e.isNotEmpty).toSet();
@@ -1519,7 +1533,7 @@ class SupabaseService {
           .map((e) => Map<String, dynamic>.from(e as Map))
           .where((p) {
             final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !swipedIds.contains(id);
+            return id.isNotEmpty && !likedIds.contains(id);
           })
           .toList();
 
