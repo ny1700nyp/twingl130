@@ -630,6 +630,11 @@ class _ChatScreenState extends State<ChatScreen> {
                           if (genderStr.isNotEmpty) genderStr,
                         ];
 
+                        final conv = _conversation;
+                        final currentUser = Supabase.instance.client.auth.currentUser;
+                        final traineeId = (conv?['trainee_id'] as String?)?.trim();
+                        final iSentRequest = currentUser != null && traineeId != null && currentUser.id == traineeId;
+
                         return Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -639,13 +644,19 @@ class _ChatScreenState extends State<ChatScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   if (subParts.isNotEmpty) ...[
                                     const SizedBox(height: 4),
@@ -669,6 +680,28 @@ class _ChatScreenState extends State<ChatScreen> {
                                 hideActionButtons: true,
                                 hideNameAgeGenderInBody: true,
                                 currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                                onLikeFromPhoto: (currentUser != null && otherUserId.isNotEmpty)
+                                    ? () async {
+                                        if (iSentRequest) {
+                                          await SupabaseService.addFavoriteFromChatToTutorTab(
+                                            currentUserId: currentUser.id,
+                                            otherUserId: otherUserId,
+                                            otherProfile: p,
+                                          );
+                                        } else {
+                                          await SupabaseService.addFavoriteFromChatToStudentTab(
+                                            currentUserId: currentUser.id,
+                                            otherUserId: otherUserId,
+                                            otherProfile: p,
+                                          );
+                                        }
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            const SnackBar(content: Text('Added to Favorite')),
+                                          );
+                                        }
+                                      }
+                                    : null,
                               ),
                             ),
                           ],

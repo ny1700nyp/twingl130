@@ -284,6 +284,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
         currentUserId: currentUser.id,
         isMatch: isMatch,
         swipedProfile: card,
+        favoriteTab: isMatch ? 'tutor' : null,
       );
     } catch (e) {
       if (!mounted) return;

@@ -6,6 +6,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme/app_theme.dart';
 import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
 import '../widgets/avatar_with_type_badge.dart';
@@ -30,10 +31,89 @@ class _HomeScreenState extends State<HomeScreen> {
   late final VoidCallback _locationListener;
   Future<DailyQuote?>? _dailyQuoteFuture;
   final Map<String, ImageProvider> _avatarProviderCache = <String, ImageProvider>{};
+  /// Logical tab index: 0=Tutors, 1=Students, 2=Fellows. Visibility depends on user type.
+  int _favoriteLogicalIndex = 0;
+
+  List<Map<String, dynamic>>? _cachedFavoriteTutors;
+  List<Map<String, dynamic>>? _cachedFavoriteStudents;
+  List<Map<String, dynamic>>? _cachedFavoriteFellows;
+  /// One in-flight future per tab so we do not restart fetch on every build (avoids N+1 / server exhaustion).
+  Future<List<Map<String, dynamic>>>? _inFlightFavoriteTutors;
+  Future<List<Map<String, dynamic>>>? _inFlightFavoriteStudents;
+  Future<List<Map<String, dynamic>>>? _inFlightFavoriteFellows;
+  void Function()? _favAddedListenerRef;
+  void _invalidateFavoriteTabCache() {
+    if (mounted) setState(() {
+      _cachedFavoriteTutors = null;
+      _cachedFavoriteStudents = null;
+      _cachedFavoriteFellows = null;
+      _inFlightFavoriteTutors = null;
+      _inFlightFavoriteStudents = null;
+      _inFlightFavoriteFellows = null;
+    });
+  }
+
+  /// Preload all three Favorite tab lists in background so tab switch is instant.
+  void _preloadFavoriteTabCaches(String userId) {
+    SupabaseService.getFavoriteTutorsTabList(userId).then((list) {
+      if (mounted) setState(() => _cachedFavoriteTutors = list);
+    });
+    SupabaseService.getFavoriteStudentsTabList(userId).then((list) {
+      if (mounted) setState(() => _cachedFavoriteStudents = list);
+    });
+    SupabaseService.getFavoriteFellowsTabList(userId).then((list) {
+      if (mounted) setState(() => _cachedFavoriteFellows = list);
+    });
+  }
+
+  /// Optimistic: remove one user from all tab caches so UI updates immediately.
+  void _removeUserFromFavoriteCaches(String otherUserId) {
+    if (!mounted) return;
+    setState(() {
+      _cachedFavoriteTutors = _cachedFavoriteTutors?.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+      _cachedFavoriteStudents = _cachedFavoriteStudents?.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+      _cachedFavoriteFellows = _cachedFavoriteFellows?.where((p) => (p['user_id'] as String?) != otherUserId).toList();
+    });
+  }
+
+  /// Optimistic: add one profile to the given Favorite tab cache (avoids refetch after like).
+  void _onFavoriteTabAdded(({String tab, Map<String, dynamic> profile})? payload) {
+    if (payload == null || !mounted) return;
+    final profile = Map<String, dynamic>.from(payload.profile);
+    final userId = (profile['user_id'] as String?)?.trim() ?? '';
+    if (userId.isEmpty) return;
+    SupabaseService.favoriteTabAdded.value = null;
+    setState(() {
+      switch (payload.tab) {
+        case 'tutor':
+          final list = _cachedFavoriteTutors ?? [];
+          if (list.any((p) => (p['user_id'] as String?) == userId)) return;
+          _cachedFavoriteTutors = [...list, profile]..sort((a, b) => ((a['name'] as String?) ?? '').compareTo((b['name'] as String?) ?? ''));
+          break;
+        case 'student':
+          final list = _cachedFavoriteStudents ?? [];
+          if (list.any((p) => (p['user_id'] as String?) == userId)) return;
+          _cachedFavoriteStudents = [...list, profile]..sort((a, b) => ((a['name'] as String?) ?? '').compareTo((b['name'] as String?) ?? ''));
+          break;
+        case 'fellow':
+          final list = _cachedFavoriteFellows ?? [];
+          if (list.any((p) => (p['user_id'] as String?) == userId)) return;
+          _cachedFavoriteFellows = [...list, profile]..sort((a, b) => ((a['name'] as String?) ?? '').compareTo((b['name'] as String?) ?? ''));
+          break;
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    SupabaseService.favoriteFromChatVersion.addListener(_invalidateFavoriteTabCache);
+    void _favAddedListener() {
+      final payload = SupabaseService.favoriteTabAdded.value;
+      if (payload != null) _onFavoriteTabAdded(payload);
+    }
+    SupabaseService.favoriteTabAdded.addListener(_favAddedListener);
+    _favAddedListenerRef = _favAddedListener;
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       // Ensure disk caches hydrate before running the "only-if-changed" refresh.
@@ -42,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
         await SupabaseService.getFavoriteTrainersCached(user.id);
         await SupabaseService.refreshBootstrapCachesIfChanged(user.id);
       }();
+      _preloadFavoriteTabCaches(user.id);
       _dailyQuoteFuture = QuoteService.getDailyQuote(userId: user.id);
     }
 
@@ -59,6 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    if (_favAddedListenerRef != null) SupabaseService.favoriteTabAdded.removeListener(_favAddedListenerRef!);
+    SupabaseService.favoriteFromChatVersion.removeListener(_invalidateFavoriteTabCache);
     SupabaseService.lastKnownLocation.removeListener(_locationListener);
     super.dispose();
   }
@@ -98,6 +181,210 @@ class _HomeScreenState extends State<HomeScreen> {
       return null;
     }
     return null;
+  }
+
+  Widget _buildFavoriteTabList(
+    BuildContext context,
+    List<Map<String, dynamic>> list,
+    int tabIndex,
+  ) {
+    if (list.isEmpty) {
+      final msg = tabIndex == 0
+          ? 'No tutors yet. Like from Meet Tutors or Perfect Tutors.'
+          : tabIndex == 1
+              ? 'No students yet. Like from Student Candidates or chat.'
+              : 'No fellows yet. Like from Fellow tutors in the area.';
+      return Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              msg,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+            ),
+          ),
+        ),
+      );
+    }
+    return ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: SupabaseService.currentUserProfileCache,
+      builder: (context, myProfile, __) => ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: list.length,
+        itemBuilder: (context, i) {
+          final p = list[i];
+          final name = (p['name'] as String?)?.trim();
+          final userId = (p['user_id'] as String?)?.trim() ?? '';
+          final avatarPath = p['main_photo_path'] as String?;
+          final avatar = _imageProviderFromPath(avatarPath);
+          final chips = SupabaseService.getFavoriteMatchingChips(myProfile, p);
+          final hasChips = chips.goalTalent.isNotEmpty || chips.talentGoal.isNotEmpty;
+          return ListTile(
+            key: ValueKey(userId),
+            leading: AvatarWithTypeBadge(
+              radius: 22,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              backgroundImage: avatar,
+              userType: p['user_type'] as String?,
+            ),
+            title: Text(name?.isNotEmpty == true ? name! : 'Unknown'),
+            subtitle: hasChips ? _buildMatchingChips(context, chips) : null,
+            isThreeLine: hasChips,
+            onTap: userId.isEmpty
+                ? null
+                : () => showProfileDetailSheet(
+                      context,
+                      userId: userId,
+                      currentUserProfile: SupabaseService.currentUserProfileCache.value,
+                      hideActionButtons: false,
+                      hideDistance: true,
+                    ),
+            onLongPress: userId.isEmpty ? null : () => _showFavoriteItemMenu(context, name: name?.isNotEmpty == true ? name! : 'Unknown', otherUserId: userId),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showFavoriteItemMenu(BuildContext context, {required String name, required String otherUserId}) async {
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser == null) return;
+    if (!context.mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                name,
+                style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.of(ctx).pop('delete'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.block),
+              title: const Text('Block'),
+              onTap: () => Navigator.of(ctx).pop('block'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    if (choice == 'delete') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Remove from Favorite'),
+          content: const Text('Remove this person from your Favorite list?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+          ],
+        ),
+      );
+      if (confirm == true && context.mounted) {
+        _removeUserFromFavoriteCaches(otherUserId);
+        Future.microtask(() => SupabaseService.removeFavoriteTabAssignment(currentUser.id, otherUserId, bumpVersion: false));
+      }
+    } else if (choice == 'block') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Block'),
+          content: const Text(
+            'Block this user? You will not see lesson requests from them.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Block')),
+          ],
+        ),
+      );
+      if (confirm == true && context.mounted) {
+        _removeUserFromFavoriteCaches(otherUserId);
+        Future.microtask(() async {
+          await SupabaseService.blockUser(currentUser.id, otherUserId, bumpVersion: false);
+          await SupabaseService.getChatConversationsCached(currentUser.id, forceRefresh: true);
+        });
+      }
+    }
+  }
+
+  Widget _buildMatchingChips(
+    BuildContext context,
+    ({List<String> goalTalent, List<String> talentGoal}) chips,
+  ) {
+    final list = <Widget>[];
+    for (final label in chips.goalTalent) {
+      list.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 4, bottom: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.twinglPurple.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.twinglPurple, width: 1),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.twinglPurple,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    for (final label in chips.talentGoal) {
+      list.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 4, bottom: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.twinglMint.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.twinglMint, width: 1),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.twinglMint,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: list,
+      ),
+    );
   }
 
   Widget _homeActionRow({
@@ -334,22 +621,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     title: Text(name?.isNotEmpty == true ? name! : 'My Profile'),
                     onTap: () => _onSelectSettings('my_profile'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PopupMenuButton<String>(
-                          tooltip: 'Settings',
-                          icon: const Icon(Icons.settings_outlined),
-                          onSelected: _onSelectSettings,
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(value: 'my_profile', child: Text('My Profile')),
-                            PopupMenuItem(value: 'edit_trainers', child: Text('Edit my Favorite')),
-                            PopupMenuItem(value: 'general_settings', child: Text('General Settings')),
-                            PopupMenuItem(value: 'logout', child: Text('Log out')),
-                          ],
-                        ),
-                      ],
-                    ),
                   );
                 },
               ),
@@ -398,7 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     actions.addAll([
                       _homeActionRow(
                         icon: Icons.groups_outlined,
-                        title: 'Other Tutors in the area',
+                        title: 'Fellow tutors in the area',
                         onTap: () => _openFindNearby(FindNearbySection.otherTrainers),
                       ),
                       const SizedBox(height: 10),
@@ -429,10 +700,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
 
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Text(
-                  'My Favorite',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: const Text(
+                  'Favorite',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -440,68 +711,151 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Favorites List
-              ValueListenableBuilder<List<Map<String, dynamic>>?>(
-                valueListenable: SupabaseService.favoriteTrainersCache,
-                builder: (context, favoritesValue, _) {
-                  if (favoritesValue == null) {
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final favorites = favoritesValue;
-                  if (favorites.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 24),
-                      child: Center(child: Text('No favorite trainers yet.')),
-                    );
-                  }
+              // Favorite tabs by user type: Student → Tutors only; Tutor → Students + Fellows; Twiner → all three
+              ValueListenableBuilder<Map<String, dynamic>?>(
+                valueListenable: SupabaseService.currentUserProfileCache,
+                builder: (context, profile, _) {
+                  final userType = (profile?['user_type'] as String?)?.trim().toLowerCase() ?? '';
+                  final isStudent = userType == 'student';
+                  final isTutor = userType == 'tutor';
+                  final visibleTabIndices = isStudent
+                      ? <int>[0]
+                      : isTutor
+                          ? <int>[1, 2]
+                          : <int>[0, 1, 2]; // Twiner or fallback: all
+                  final effectiveIndex = visibleTabIndices.contains(_favoriteLogicalIndex)
+                      ? _favoriteLogicalIndex
+                      : visibleTabIndices.first;
 
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: favorites.length,
-                    itemBuilder: (context, i) {
-                      final p = favorites[i];
-                      final name = (p['name'] as String?)?.trim();
-                      final userId = (p['user_id'] as String?)?.trim() ?? '';
-                      final aboutMe = (p['about_me'] as String?)?.trim() ?? '';
-                      final avatarPath = p['main_photo_path'] as String?;
-                      final avatar = _imageProviderFromPath(avatarPath);
-
-                  return ListTile(
-                    key: ValueKey(userId),
-                        leading: AvatarWithTypeBadge(
-                          radius: 22,
-                          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          backgroundImage: avatar,
-                          userType: p['user_type'] as String?,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (visibleTabIndices.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: List.generate(visibleTabIndices.length, (i) {
+                                final logicalIndex = visibleTabIndices[i];
+                                final label = logicalIndex == 0
+                                    ? 'Tutors'
+                                    : logicalIndex == 1
+                                        ? 'Students'
+                                        : 'Fellows';
+                                final selected = effectiveIndex == logicalIndex;
+                                return Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(() => _favoriteLogicalIndex = logicalIndex),
+                                    behavior: HitTestBehavior.opaque,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        color: selected
+                                            ? AppTheme.primaryGreen
+                                            : Colors.transparent,
+                                        boxShadow: selected
+                                            ? [
+                                                BoxShadow(
+                                                  color: AppTheme.primaryGreen.withOpacity(0.3),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 1),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Text(
+                                        label,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                          fontSize: 13,
+                                          color: selected
+                                              ? Colors.white
+                                              : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
                         ),
-                        title: Text(name?.isNotEmpty == true ? name! : 'Unknown'),
-                        subtitle: aboutMe.isNotEmpty
-                            ? Text(
-                                aboutMe,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
-                                ),
-                              )
-                            : null,
-                        isThreeLine: aboutMe.isNotEmpty,
-                        onTap: userId.isEmpty
-                            ? null
-                            : () => showProfileDetailSheet(
-                                  context,
-                                  userId: userId,
-                                  currentUserProfile: SupabaseService.currentUserProfileCache.value,
-                                  hideActionButtons: false,
-                                  hideDistance: true,
-                                ),
-                      );
-                    },
+                      if (visibleTabIndices.length > 1) const SizedBox(height: 6),
+
+                      ValueListenableBuilder<int>(
+                        valueListenable: SupabaseService.favoriteFromChatVersion,
+                        builder: (context, version, __) {
+                          final user = Supabase.instance.client.auth.currentUser;
+                          if (user == null) {
+                            return const Padding(
+                              padding: EdgeInsets.only(top: 24),
+                              child: Center(child: Text('Sign in to see favorites')),
+                            );
+                          }
+                          final tabIndex = effectiveIndex;
+                          final cachedList = tabIndex == 0
+                              ? _cachedFavoriteTutors
+                              : tabIndex == 1
+                                  ? _cachedFavoriteStudents
+                                  : _cachedFavoriteFellows;
+
+                          if (cachedList != null) {
+                            return _buildFavoriteTabList(context, cachedList, tabIndex);
+                          }
+
+                          // Use a single in-flight future per tab so rebuilds do not restart the fetch.
+                          Future<List<Map<String, dynamic>>> future;
+                          switch (tabIndex) {
+                            case 0:
+                              future = _inFlightFavoriteTutors ??= SupabaseService.getFavoriteTutorsTabList(user.id);
+                              break;
+                            case 1:
+                              future = _inFlightFavoriteStudents ??= SupabaseService.getFavoriteStudentsTabList(user.id);
+                              break;
+                            default:
+                              future = _inFlightFavoriteFellows ??= SupabaseService.getFavoriteFellowsTabList(user.id);
+                          }
+                          return FutureBuilder<List<Map<String, dynamic>>>(
+                            key: ValueKey('fav_${tabIndex}_$version'),
+                            future: future,
+                            builder: (context, snap) {
+                              if (snap.connectionState == ConnectionState.waiting) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(top: 24),
+                                  child: Center(child: CircularProgressIndicator()),
+                                );
+                              }
+                              final list = snap.data ?? [];
+                              if (snap.connectionState == ConnectionState.done) {
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (!mounted) return;
+                                  setState(() {
+                                    if (tabIndex == 0) {
+                                      if (snap.hasData) _cachedFavoriteTutors = list;
+                                      _inFlightFavoriteTutors = null;
+                                    } else if (tabIndex == 1) {
+                                      if (snap.hasData) _cachedFavoriteStudents = list;
+                                      _inFlightFavoriteStudents = null;
+                                    } else {
+                                      if (snap.hasData) _cachedFavoriteFellows = list;
+                                      _inFlightFavoriteFellows = null;
+                                    }
+                                  });
+                                });
+                              }
+                              return _buildFavoriteTabList(context, list, tabIndex);
+                            },
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),

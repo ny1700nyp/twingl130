@@ -115,7 +115,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
       case FindNearbySection.meetTutors:
         return 'Meet Tutors in Your Area';
       case FindNearbySection.otherTrainers:
-        return 'Other Tutors in the area';
+        return 'Fellow tutors in the area';
       case FindNearbySection.studentCandidates:
         return 'Student Candidates in the area';
     }
@@ -306,12 +306,27 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     if (swipedUserId == null || swipedUserId.isEmpty) return;
 
     final isMatch = direction == AxisDirection.right;
+    String? favoriteTab;
+    if (isMatch) {
+      switch (widget.section) {
+        case FindNearbySection.meetTutors:
+          favoriteTab = 'tutor';
+          break;
+        case FindNearbySection.otherTrainers:
+          favoriteTab = 'fellow';
+          break;
+        case FindNearbySection.studentCandidates:
+          favoriteTab = 'student';
+          break;
+      }
+    }
     try {
       await SupabaseService.saveMatch(
         swipedUserId: swipedUserId,
         currentUserId: currentUser.id,
         isMatch: isMatch,
         swipedProfile: card,
+        favoriteTab: favoriteTab,
       );
     } catch (e) {
       if (!mounted) return;

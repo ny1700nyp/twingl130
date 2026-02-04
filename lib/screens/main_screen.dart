@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme/app_theme.dart';
 import 'calendar_dashboard.dart';
 import 'chat_dashboard.dart';
 import 'home_screen.dart';
@@ -91,6 +92,7 @@ class _MainScreenState extends State<MainScreen> {
           return BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             currentIndex: _currentIndex,
+            selectedItemColor: AppTheme.primaryGreen,
             showSelectedLabels: false,
             showUnselectedLabels: false,
             onTap: (idx) {

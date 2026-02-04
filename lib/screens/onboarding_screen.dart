@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -49,12 +51,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _rateController = TextEditingController(); // tutor only
   bool _parentParticipationWelcomed = false; // tutor only
 
-  // Photos (data URLs)
-  // - 1 main photo required
-  // - optional 3 additional
-  // Stored as: main_photo_path + profile_photos (includes main first)
-  final List<String> _profilePhotos = [];
-  final List<String> _certificatePhotos = []; // up to 3
+  // Photo: single required profile photo (data URL)
+  final List<String> _profilePhotos = []; // max 1
 
   // Agreements (required for onboarding only)
   bool _agreeRoleWaiver = false;
@@ -212,29 +210,22 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       _parentParticipationWelcomed =
           (existing['parent_participation_welcomed'] as bool?) ?? false;
 
-      // photos
+      // photo: single required
       final profilePhotos = existing['profile_photos'] as List<dynamic>?;
       final main = (existing['main_photo_path'] as String?)?.trim();
       if (profilePhotos != null && profilePhotos.isNotEmpty) {
-        _profilePhotos
-          ..clear()
-          ..addAll(profilePhotos.map((e) => e.toString()).where((e) => e.trim().isNotEmpty));
+        final list = profilePhotos.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        if (list.isNotEmpty) {
+          _profilePhotos
+            ..clear()
+            ..add(list.first);
+        }
       } else if (main != null && main.isNotEmpty) {
         _profilePhotos
           ..clear()
           ..add(main);
       }
-      if (_profilePhotos.length > 4) _profilePhotos.removeRange(4, _profilePhotos.length);
-
-      final certs = existing['certificate_photos'] as List<dynamic>?;
-      if (certs != null && certs.isNotEmpty) {
-        _certificatePhotos
-          ..clear()
-          ..addAll(certs.map((e) => e.toString()).where((e) => e.trim().isNotEmpty));
-      }
-      if (_certificatePhotos.length > 3) {
-        _certificatePhotos.removeRange(3, _certificatePhotos.length);
-      }
+      if (_profilePhotos.length > 1) _profilePhotos.removeRange(1, _profilePhotos.length);
 
       final lat = existing['latitude'];
       final lon = existing['longitude'];
@@ -484,17 +475,22 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     });
   }
 
+  /// Max longest edge for saved profile photo (reduces storage).
+  static const int _profilePhotoMaxSize = 300;
+  static const int _profilePhotoQuality = 80;
+
   Future<String?> _pickSinglePhotoAsDataUrl() async {
     try {
       final picker = ImagePicker();
       final XFile? file = await picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 70,
+        imageQuality: 85,
       );
       if (file == null) return null;
       final bytes = await file.readAsBytes();
-      final mime = _guessMimeType(file.name);
-      return 'data:$mime;base64,${base64Encode(bytes)}';
+
+      final Uint8List outBytes = await _compressProfilePhoto(bytes);
+      return 'data:image/jpeg;base64,${base64Encode(outBytes)}';
     } catch (e) {
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -504,32 +500,20 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     }
   }
 
-  Future<List<String>> _pickMultiPhotosAsDataUrls({required int maxAdd}) async {
+  /// Resize and compress image for profile photo (max 800px, JPEG 80%).
+  Future<Uint8List> _compressProfilePhoto(Uint8List bytes) async {
     try {
-      final picker = ImagePicker();
-      final files = await picker.pickMultiImage(imageQuality: 70);
-      if (files.isEmpty) return [];
-      final out = <String>[];
-      for (final f in files.take(maxAdd)) {
-        final bytes = await f.readAsBytes();
-        final mime = _guessMimeType(f.name);
-        out.add('data:$mime;base64,${base64Encode(bytes)}');
-      }
-      return out;
-    } catch (e) {
-      if (!mounted) return [];
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick photos: $e')),
+      final result = await FlutterImageCompress.compressWithList(
+        bytes,
+        minWidth: _profilePhotoMaxSize,
+        minHeight: _profilePhotoMaxSize,
+        quality: _profilePhotoQuality,
+        format: CompressFormat.jpeg,
       );
-      return [];
+      return result;
+    } catch (_) {
+      return bytes;
     }
-  }
-
-  String _guessMimeType(String filename) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
   }
 
   int? _computedAge() {
@@ -710,10 +694,10 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
             : null,
         'parent_participation_welcomed': isTutorProfile ? _parentParticipationWelcomed : false,
         'tutoring_rate': isTutorProfile ? _rateController.text.trim() : null,
-        // Photos
+        // Single required profile photo
         'main_photo_path': _profilePhotos.isNotEmpty ? _profilePhotos.first : null,
-        'profile_photos': _profilePhotos.isNotEmpty ? _profilePhotos : null,
-        'certificate_photos': _certificatePhotos.isNotEmpty ? _certificatePhotos : null,
+        'profile_photos': null,
+        'certificate_photos': null,
         'updated_at': TimeUtils.nowUtcIso(),
       };
 
@@ -816,74 +800,87 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         child: Text(s, style: Theme.of(context).textTheme.titleMedium),
       );
 
-  Widget _photoGrid({
-    required List<String> photos,
-    required int maxCount,
-    required VoidCallback onAdd,
-    required void Function(int index) onRemove,
-    String? helperText,
-  }) {
+  Widget _singlePhotoPicker() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (helperText != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              helperText,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                  ),
-            ),
-          ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (int i = 0; i < photos.length; i++)
-              Stack(
-                clipBehavior: Clip.none,
+        if (_profilePhotos.isEmpty)
+          SizedBox(
+            width: 160,
+            height: 160,
+            child: OutlinedButton(
+              onPressed: _isSaving ? null : () async {
+                final one = await _pickSinglePhotoAsDataUrl();
+                if (one == null) return;
+                if (!mounted) return;
+                setState(() {
+                  _profilePhotos.clear();
+                  _profilePhotos.add(one);
+                });
+              },
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      base64Decode(photos[i].split(',').last),
-                      width: 92,
-                      height: 92,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    right: -8,
-                    top: -8,
-                    child: IconButton(
-                      iconSize: 18,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                      onPressed: _isSaving ? null : () => onRemove(i),
-                      icon: const Icon(Icons.cancel, color: Colors.black54),
-                    ),
-                  ),
+                  Icon(Icons.add_photo_alternate_outlined, size: 40),
+                  SizedBox(height: 8),
+                  Text('Add photo'),
                 ],
               ),
-            if (photos.length < maxCount)
-              SizedBox(
-                width: 92,
-                height: 92,
-                child: OutlinedButton(
-                  onPressed: _isSaving ? null : onAdd,
-                  child: const Icon(Icons.add),
+            ),
+          )
+        else
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  base64Decode(_profilePhotos.first.split(',').last),
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.cover,
                 ),
               ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '${photos.length}/$maxCount',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+              Positioned(
+                right: -8,
+                top: -8,
+                child: IconButton(
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                  onPressed: _isSaving
+                      ? null
+                      : () async {
+                          final one = await _pickSinglePhotoAsDataUrl();
+                          if (one == null) return;
+                          if (!mounted) return;
+                          setState(() {
+                            _profilePhotos.clear();
+                            _profilePhotos.add(one);
+                          });
+                        },
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                  ),
+                ),
               ),
-        ),
+              Positioned(
+                right: -8,
+                bottom: -8,
+                child: IconButton(
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                  onPressed: _isSaving ? null : () => setState(() => _profilePhotos.clear()),
+                  icon: const Icon(Icons.delete_outline, color: Colors.white),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -1184,47 +1181,14 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         case _OnboardingStepKey.photos:
           steps.add(
             Step(
-              title: const Text('Photos'),
+              title: const Text('Profile photo'),
               isActive: isActive,
               state: state,
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _sectionTitle('Profile photos'),
-                  _photoGrid(
-                    photos: _profilePhotos,
-                    maxCount: 4,
-                    helperText: '1 required + up to 3 optional. (Can be changed later)',
-                    onAdd: () async {
-                      // If none, pick single as main; otherwise multi-add.
-                      if (_profilePhotos.isEmpty) {
-                        final one = await _pickSinglePhotoAsDataUrl();
-                        if (one == null) return;
-                        if (!mounted) return;
-                        setState(() => _profilePhotos.add(one));
-                      } else {
-                        final remaining = 4 - _profilePhotos.length;
-                        final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
-                        if (!mounted) return;
-                        setState(() => _profilePhotos.addAll(added));
-                      }
-                    },
-                    onRemove: (idx) => setState(() => _profilePhotos.removeAt(idx)),
-                  ),
-                  const SizedBox(height: 16),
-                  _sectionTitle('Certificates / Awards / Degrees (optional)'),
-                  _photoGrid(
-                    photos: _certificatePhotos,
-                    maxCount: 3,
-                    helperText: 'Up to 3 (optional). (Can be changed later)',
-                    onAdd: () async {
-                      final remaining = 3 - _certificatePhotos.length;
-                      final added = await _pickMultiPhotosAsDataUrls(maxAdd: remaining);
-                      if (!mounted) return;
-                      setState(() => _certificatePhotos.addAll(added));
-                    },
-                    onRemove: (idx) => setState(() => _certificatePhotos.removeAt(idx)),
-                  ),
+                  _sectionTitle('Profile photo (required)'),
+                  _singlePhotoPicker(),
                 ],
               ),
             ),

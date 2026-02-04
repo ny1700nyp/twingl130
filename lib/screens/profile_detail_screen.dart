@@ -23,6 +23,8 @@ class ProfileDetailScreen extends StatelessWidget {
   final List<Widget>? appBarActions;
   /// When true, hide the distance label below Chat history (e.g. My Favorite detail).
   final bool hideDistance;
+  /// When set (e.g. from chat), show a thumbs-up like button on the photo below the link button.
+  final VoidCallback? onLikeFromPhoto;
 
   const ProfileDetailScreen({
     super.key,
@@ -33,6 +35,7 @@ class ProfileDetailScreen extends StatelessWidget {
     this.hideNameAgeGenderInBody = false,
     this.appBarActions,
     this.hideDistance = false,
+    this.onLikeFromPhoto,
   });
 
   String _getPronouns(String? gender) {
@@ -108,28 +111,30 @@ class ProfileDetailScreen extends StatelessWidget {
     return '${ageRange}s';
   }
 
+  /// [highlightColor]: when non-null and highlighted, use purple (goal↔talent) or mint (talent↔goal).
   Widget _buildProfileChip(
     BuildContext context,
     String label, {
-    required bool highlighted,
+    bool highlighted = false,
+    Color? highlightColor,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final bg = highlighted
+        ? (highlightColor ?? scheme.primary)
+        : scheme.surfaceContainerHighest;
+    final textColor = highlighted
+        ? (highlightColor != null ? Colors.white : scheme.onPrimary)
+        : scheme.onSurface;
     return Chip(
       label: Text(
         label,
         style: TextStyle(
-          color: highlighted ? scheme.onPrimary : scheme.onSurface,
+          color: textColor,
           fontWeight: highlighted ? FontWeight.bold : FontWeight.normal,
         ),
       ),
-      backgroundColor: highlighted
-          ? scheme.primary
-          : scheme.surfaceContainerHighest,
-      side: BorderSide(
-        color: highlighted
-            ? scheme.primary
-            : scheme.surfaceContainerHighest,
-      ),
+      backgroundColor: bg,
+      side: BorderSide(color: bg),
     );
   }
 
@@ -243,108 +248,6 @@ class ProfileDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCertificateImage(BuildContext context, String imagePath) {
-    if (imagePath.isEmpty) {
-      return Container(
-        width: 150,
-        height: 200,
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Icon(
-          Icons.image,
-          size: 50,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-
-    // base64 data URL인 경우
-    if (imagePath.startsWith('data:image')) {
-      return Image.memory(
-        base64Decode(imagePath.split(',')[1]),
-        fit: BoxFit.cover,
-        width: 150,
-        height: 200,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 150,
-            height: 200,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.image,
-              size: 50,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        },
-      );
-    }
-    
-    // 네트워크 URL인 경우
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return Image.network(
-        imagePath,
-        fit: BoxFit.cover,
-        width: 150,
-        height: 200,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 150,
-            height: 200,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.image,
-              size: 50,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        },
-      );
-    }
-    
-    // 로컬 파일 경로인 경우 (모바일만)
-    if (!kIsWeb) {
-      try {
-        return Image.file(
-          File(imagePath),
-          fit: BoxFit.cover,
-          width: 150,
-          height: 200,
-        errorBuilder: (ctx, error, stackTrace) {
-          return Container(
-            width: 150,
-            height: 200,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.image,
-              size: 50,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        },
-        );
-      } catch (e) {
-        return Container(
-          width: 150,
-          height: 200,
-          color: Colors.grey[300],
-          child: const Icon(Icons.image, size: 50),
-        );
-      }
-    }
-    
-    // 기본값
-    return Container(
-      width: 150,
-      height: 200,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.image,
-        size: 50,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
-  }
-
   // 프로필 링크 생성
   String _generateProfileLink() {
     final userId = profile['user_id'] as String?;
@@ -398,9 +301,29 @@ class ProfileDetailScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildPhotoSlider(BuildContext context, List<String> photos) {
+  Widget _buildPhotoSlider(BuildContext context, List<String> photos, {VoidCallback? onLikeFromPhoto}) {
     final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
     final isTutorOrTwiner = userType == 'tutor' || userType == 'twiner';
+
+    final showShare = isTutorOrTwiner;
+    final likeCallback = onLikeFromPhoto;
+    final showLike = likeCallback != null;
+
+    final topRightChildren = <Widget>[
+      if (showLike) _buildLikeOnPhotoButton(context, likeCallback),
+      if (showShare && showLike) const SizedBox(width: 8),
+      if (showShare) _buildShareButton(context),
+    ];
+    final topRightWidget = topRightChildren.isEmpty
+        ? null
+        : Positioned(
+            top: 8,
+            right: 8,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: topRightChildren,
+            ),
+          );
 
     if (photos.isEmpty) {
       return Container(
@@ -415,35 +338,21 @@ class ProfileDetailScreen extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-            // Tutor/Stutor인 경우에만 공유 버튼 표시
-            if (isTutorOrTwiner)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: _buildShareButton(context),
-              ),
+            if (topRightWidget != null) topRightWidget,
           ],
         ),
       );
     }
 
-    // 사진이 1장이면 슬라이더 없이 단순 이미지 표시 (공유 버튼 포함)
     if (photos.length == 1) {
       return Stack(
         children: [
           _buildProfileImage(context, photos[0]),
-          // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-          if (isTutorOrTwiner)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _buildShareButton(context),
-            ),
+          if (topRightWidget != null) topRightWidget,
         ],
       );
     }
 
-    // 여러 사진이면 PageView 슬라이더 사용 (공유 버튼 포함). key로 재빌드 시 상태 유지.
     final sliderKey = ValueKey<String>(photos.isEmpty ? '' : photos.first);
     return Stack(
       children: [
@@ -452,14 +361,30 @@ class ProfileDetailScreen extends StatelessWidget {
           photos: photos,
           buildImage: (imagePath) => _buildProfileImage(context, imagePath),
         ),
-        // Trainer인 경우에만 공유 버튼 표시 (오른쪽 상단)
-        if (isTutorOrTwiner)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: _buildShareButton(context),
-          ),
+        if (topRightWidget != null) topRightWidget,
       ],
+    );
+  }
+
+  Widget _buildLikeOnPhotoButton(BuildContext context, VoidCallback onLike) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onLike,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.thumb_up_outlined,
+            color: Colors.white,
+            size: 20,
+          ),
+        ),
+      ),
     );
   }
 
@@ -582,7 +507,6 @@ class ProfileDetailScreen extends StatelessWidget {
     final teachingMethods = profile['teaching_methods'] as List<dynamic>?;
     final parentParticipationWelcomed = profile['parent_participation_welcomed'] as bool? ?? false;
     final tutoringRate = profile['tutoring_rate'] as String?;
-    final certificatePhotos = profile['certificate_photos'] as List<dynamic>?;
     final aboutMe = (profile['about_me'] as String?)?.trim();
 
     // Student: goals; Twiner: goals or talents
@@ -707,7 +631,7 @@ class ProfileDetailScreen extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   clipBehavior: Clip.antiAlias,
-                  child: _buildPhotoSlider(context, photos),
+                  child: _buildPhotoSlider(context, photos, onLikeFromPhoto: onLikeFromPhoto),
                 ),
               ),
             ),
@@ -870,7 +794,7 @@ class ProfileDetailScreen extends StatelessWidget {
                     SizedBox(height: sectionSpacing),
                   ],
                   
-                  // Tutor/Tudent: I can teach (talents)
+                  // Tutor/Twiner: I can teach (talents). Purple = my goal ↔ their talent (I'm Student or Twiner).
                   if ((userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
                     Text(
                       'I can teach',
@@ -886,15 +810,14 @@ class ProfileDetailScreen extends StatelessWidget {
                       children: talents
                           .map((talent) {
                             final talentStr = talent.toString();
-                            final matchingNorm =
-                                (currentUserType == 'tutor' || currentUserType == 'twiner') && (userType == 'tutor' || userType == 'twiner')
-                                    ? currentUserTalentsNorm
-                                    : currentUserGoalsNorm;
-                            final isMatched = matchingNorm.contains(_norm(talentStr));
+                            final isMatchPurple = (currentUserType == 'student' || currentUserType == 'twiner') &&
+                                currentUserGoalsNorm.contains(_norm(talentStr));
+                            final highlighted = isMatchPurple && !isMyProfile;
                             return _buildProfileChip(
                               context,
                               talentStr,
-                              highlighted: isMatched && !isMyProfile,
+                              highlighted: highlighted,
+                              highlightColor: highlighted ? AppTheme.twinglPurple : null,
                             );
                           })
                           .toList(),
@@ -902,7 +825,7 @@ class ProfileDetailScreen extends StatelessWidget {
                     SizedBox(height: sectionSpacing),
                   ],
                   
-                  // Stutor 전용: I want to learn (goals 컬럼)
+                  // Twiner 전용: I want to learn (goals). Mint = my talent ↔ their goal (I'm Tutor or Twiner).
                   if (userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
@@ -918,10 +841,15 @@ class ProfileDetailScreen extends StatelessWidget {
                       children: twinerGoals
                           .map((goal) {
                             final goalStr = goal.toString();
-                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
-                                ? currentUserTalentsNorm.contains(_norm(goalStr))
-                                : currentUserGoalsNorm.contains(_norm(goalStr));
-                            return _buildProfileChip(context, goalStr, highlighted: isMatched && !isMyProfile);
+                            final isMatchMint = (currentUserType == 'tutor' || currentUserType == 'twiner') &&
+                                currentUserTalentsNorm.contains(_norm(goalStr));
+                            final highlighted = isMatchMint && !isMyProfile;
+                            return _buildProfileChip(
+                              context,
+                              goalStr,
+                              highlighted: highlighted,
+                              highlightColor: highlighted ? AppTheme.twinglMint : null,
+                            );
                           })
                           .toList(),
                     ),
@@ -997,7 +925,7 @@ class ProfileDetailScreen extends StatelessWidget {
                     ],
                   ],
                   
-                  // Student 전용: I want to learn (goals 컬럼)
+                  // Student 전용: I want to learn (goals). Mint = my talent ↔ their goal (I'm Tutor or Twiner).
                   if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
@@ -1013,45 +941,17 @@ class ProfileDetailScreen extends StatelessWidget {
                       children: traineeGoals
                           .map((goal) {
                             final goalStr = goal.toString();
-                            final isMatched = (currentUserType == 'tutor' || currentUserType == 'twiner')
-                                ? currentUserTalentsNorm.contains(_norm(goalStr))
-                                : currentUserGoalsNorm.contains(_norm(goalStr));
-                            return _buildProfileChip(context, goalStr, highlighted: isMatched && !isMyProfile);
+                            final isMatchMint = (currentUserType == 'tutor' || currentUserType == 'twiner') &&
+                                currentUserTalentsNorm.contains(_norm(goalStr));
+                            final highlighted = isMatchMint && !isMyProfile;
+                            return _buildProfileChip(
+                              context,
+                              goalStr,
+                              highlighted: highlighted,
+                              highlightColor: highlighted ? AppTheme.twinglMint : null,
+                            );
                           })
                           .toList(),
-                    ),
-                    SizedBox(height: sectionSpacing),
-                  ],
-                  
-                  // Certificates (Trainer만)
-                  if ((userType == 'tutor' || userType == 'twiner') && certificatePhotos != null && certificatePhotos.isNotEmpty) ...[
-                    Text(
-                      'Certificates / Awards / Degrees',
-                      style: TextStyle(
-                        fontSize: sectionTitleFontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: certificatePhotos.length,
-                        itemBuilder: (context, index) {
-                          final certificatePhoto = certificatePhotos[index] as String?;
-                          if (certificatePhoto == null || certificatePhoto.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12.0),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: _buildCertificateImage(context, certificatePhoto),
-                            ),
-                          );
-                        },
-                      ),
                     ),
                     SizedBox(height: sectionSpacing),
                   ],

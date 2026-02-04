@@ -21,6 +21,15 @@ class SupabaseService {
       ValueNotifier<List<Map<String, dynamic>>?>(null);
   static String? _favoriteTrainersCacheUserId;
 
+  /// Favorite tab assignments (in-memory cache). Notifier triggers UI refresh.
+  static final ValueNotifier<int> favoriteFromChatVersion = ValueNotifier<int>(0);
+  /// When set, HomeScreen adds this profile to the given tab cache (no full refetch). Cleared by listener.
+  static final ValueNotifier<({String tab, Map<String, dynamic> profile})?> favoriteTabAdded =
+      ValueNotifier<({String tab, Map<String, dynamic> profile})?>(null);
+  static final Map<String, Set<String>> _favoriteTutorIdsFromChat = {};
+  static final Map<String, Set<String>> _favoriteStudentIdsFromChat = {};
+  static final Map<String, Set<String>> _favoriteFellowIdsFromChat = {};
+
   static final ValueNotifier<({double lat, double lon})?> lastKnownLocation =
       ValueNotifier<({double lat, double lon})?>(null);
 
@@ -153,6 +162,11 @@ class SupabaseService {
     _chatMessagesCache.clear();
     _chatMessagesPersistLastAt.clear();
 
+    _favoriteTutorIdsFromChat.clear();
+    _favoriteStudentIdsFromChat.clear();
+    _favoriteFellowIdsFromChat.clear();
+    favoriteFromChatVersion.value++;
+
     _diskHydratedUserIds.clear();
     _avatarRehydrateAttemptedUserIds.clear();
   }
@@ -172,6 +186,22 @@ class SupabaseService {
       final msg = response.data is Map ? (response.data['error'] ?? response.data['msg'] ?? response.data) : response.data;
       throw Exception(msg ?? 'Account deletion failed (${response.status})');
     }
+  }
+
+  /// Load only profile from disk (for fast first paint). Does not set _diskHydratedUserIds.
+  static Future<Map<String, dynamic>?> loadProfileFromDiskOnly(String userId) async {
+    try {
+      final profile = await PersistentCache.getMap(_kProfile(userId));
+      return profile != null && profile.isNotEmpty ? Map<String, dynamic>.from(profile) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Set profile cache from fast-path (so HomeScreen sees it before full hydrate). Internal use.
+  static void setCurrentUserProfileFromDisk(String userId, Map<String, dynamic> profile) {
+    _currentUserProfileCacheUserId = userId;
+    currentUserProfileCache.value = Map<String, dynamic>.from(profile);
   }
 
   /// Load cached profile/favorites/location/city/chat-conversations from disk into memory.
@@ -285,16 +315,35 @@ class SupabaseService {
     await supabase.from('profiles').upsert(payload, onConflict: 'user_id');
   }
 
-  /// 공개 프로필 가져오기 (공유/상대방 프로필)
+  /// 프로필 조회 기록 (다른 사람 프로필을 볼 때 호출). profile_views 테이블이 있어야 동작.
+  static Future<void> recordProfileView({required String viewerId, required String viewedUserId}) async {
+    if (viewerId.isEmpty || viewedUserId.isEmpty || viewerId == viewedUserId) return;
+    try {
+      await supabase.from('profile_views').insert({
+        'viewer_id': viewerId,
+        'viewed_user_id': viewedUserId,
+      });
+    } catch (e) {
+      // profile_views 없음 / unique 위반(같은 사람이 같은 프로필 재조회) / RLS 등은 무시
+    }
+  }
+
+  /// 공개 프로필 가져오기 (공유/상대방 프로필). 다른 사람 프로필일 경우 조회 수 기록.
   static Future<Map<String, dynamic>?> getPublicProfile(String userId) async {
     try {
+      final currentUser = supabase.auth.currentUser;
       final response = await supabase
           .from('profiles')
           .select()
           .eq('user_id', userId)
           .maybeSingle();
       if (response == null) return null;
-      return Map<String, dynamic>.from(response);
+      final profile = Map<String, dynamic>.from(response);
+
+      if (currentUser != null && currentUser.id != userId) {
+        recordProfileView(viewerId: currentUser.id, viewedUserId: userId);
+      }
+      return profile;
     } catch (e) {
       print('Failed to get public profile: $e');
       return null;
@@ -703,13 +752,14 @@ class SupabaseService {
   }
 
   static Future<List<Map<String, dynamic>>> _fetchChatConversationsWithDetails(String userId) async {
+    final blockedIds = await getBlockedUserIds(userId);
+
     // Prefer RPC if installed.
     try {
       final res = await supabase.rpc('get_dashboard_conversations');
       if (res is List) {
-        return res.map((e) {
+        final list = res.map((e) {
           final m = Map<String, dynamic>.from(e as Map);
-          // Normalize jsonb maps if needed.
           if (m['other_profile'] is Map) {
             m['other_profile'] = Map<String, dynamic>.from(m['other_profile'] as Map);
           }
@@ -721,12 +771,19 @@ class SupabaseService {
             m['request_message'] =
                 _normalizeMessageRow(Map<String, dynamic>.from(m['request_message'] as Map));
           }
+          final tid = m['trainer_id']?.toString();
+          final sid = m['trainee_id']?.toString();
+          m['other_user_id'] = (tid == userId) ? sid : tid;
           return m;
         }).toList();
+        final filtered = list.where((c) {
+          final other = c['other_user_id']?.toString();
+          return other != null && other.isNotEmpty && !blockedIds.contains(other);
+        }).toList();
+        _sortDashboardConversations(filtered);
+        return filtered;
       }
-    } catch (_) {
-      // ignore; fallback below
-    }
+    } catch (_) {}
 
     // Fallback: N+1 enrichment
     final currentUser = supabase.auth.currentUser;
@@ -738,8 +795,8 @@ class SupabaseService {
       final trainerId = conv['trainer_id'] as String?;
       final traineeId = conv['trainee_id'] as String?;
       final otherUserId = (trainerId == userId) ? traineeId : trainerId;
-      final otherProfile =
-          (otherUserId == null || otherUserId.isEmpty) ? null : await getPublicProfile(otherUserId);
+      if (otherUserId == null || otherUserId.isEmpty || blockedIds.contains(otherUserId)) continue;
+      final otherProfile = await getPublicProfile(otherUserId);
       final latestMessage = await getLatestMessage(convId);
       final requestMessage = await getRequestMessage(convId);
       final unreadCount =
@@ -1128,6 +1185,44 @@ class SupabaseService {
     return targetNorm.intersection(myKeywordsNorm).length;
   }
 
+  static String _norm(String s) => s.trim().toLowerCase();
+
+  /// Matching chips for Favorite list: (my goal ↔ their talent) purple, (my talent ↔ their goal) mint.
+  /// Other is Tutor: only goalTalent. Other is Student: only talentGoal. Other is Twiner: both.
+  static ({List<String> goalTalent, List<String> talentGoal}) getFavoriteMatchingChips(
+    Map<String, dynamic>? myProfile,
+    Map<String, dynamic> otherProfile,
+  ) {
+    final myGoals = getProfileGoals(myProfile ?? {});
+    final myTalents = getProfileTalents(myProfile ?? {});
+    final theirGoals = getProfileGoals(otherProfile);
+    final theirTalents = getProfileTalents(otherProfile);
+    final otherType = getEffectiveUserType(otherProfile);
+
+    final myGoalsNorm = myGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
+    final myTalentsNorm = myTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
+    final theirGoalsNorm = theirGoals.map(_norm).where((e) => e.isNotEmpty).toSet();
+    final theirTalentsNorm = theirTalents.map(_norm).where((e) => e.isNotEmpty).toSet();
+
+    List<String> goalTalent = [];
+    List<String> talentGoal = [];
+
+    if (otherType == 'tutor' || otherType == 'twiner') {
+      final matched = myGoalsNorm.intersection(theirTalentsNorm);
+      for (final t in theirTalents) {
+        if (matched.contains(_norm(t))) goalTalent.add(t.trim());
+      }
+    }
+    if (otherType == 'student' || otherType == 'twiner') {
+      final matched = myTalentsNorm.intersection(theirGoalsNorm);
+      for (final g in theirGoals) {
+        if (matched.contains(_norm(g))) talentGoal.add(g.trim());
+      }
+    }
+
+    return (goalTalent: goalTalent, talentGoal: talentGoal);
+  }
+
   /// Fetches swiped user ids for a user (for parallel use with profile/card loading).
   static Future<Set<String>> getSwipedUserIds(String currentUserId) async {
     try {
@@ -1143,13 +1238,15 @@ class SupabaseService {
     }
   }
 
-  /// [Meet Tutors in your area] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; ≤30km.
+  /// [Meet Tutors in your area] Student/Twiner: target = Tutor + Twiner; ≤30km.
+  /// Within range, up to 20 are shown: matched (goal↔talent) first, then by distance; unmatched in range can still appear if within top 20.
   static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
     required List<String> myGoals,
     required double currentLatitude,
     required double currentLongitude,
     required String currentUserId,
     double maxDistanceMeters = 30000,
+    int limit = 20,
     Set<String>? preloadedSwipedIds,
   }) async {
     try {
@@ -1195,7 +1292,7 @@ class SupabaseService {
         final talents = getProfileTalents(p);
         p['match_count'] = _matchCount(myKeywordsNorm, talents);
       }
-      list.removeWhere((p) => (p['match_count'] as int? ?? 0) == 0);
+      // Do not filter out match_count == 0: show up to [limit] within range, matched first then by distance
       list.sort((a, b) {
         final ma = (a['match_count'] as int? ?? 0);
         final mb = (b['match_count'] as int? ?? 0);
@@ -1204,7 +1301,7 @@ class SupabaseService {
         final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
         return da.compareTo(db);
       });
-      return list;
+      return list.take(limit).toList();
     } catch (e) {
       print('getNearbyTutorsForStudent: $e');
       return [];
@@ -1254,7 +1351,7 @@ class SupabaseService {
     }
   }
 
-  /// [Other Tutors in the area] Tutor/Twiner: my talents ↔ target talents; target = Tutor + Twiner; ≤30km; sort by match count.
+  /// [Fellow tutors in the area] Tutor/Twiner: my talents ↔ target talents; target = Tutor + Twiner; ≤30km; sort by match count.
   static Future<List<Map<String, dynamic>>> getNearbyTrainersForTutor({
     required List<String> myTalents,
     required double currentLatitude,
@@ -1450,14 +1547,13 @@ class SupabaseService {
   }
 
   /// matches 테이블에 매치 데이터 저장
-  /// [swipedUserId]: 스와이프한 유저의 ID
-  /// [currentUserId]: 현재 로그인한 유저의 ID
-  /// [isMatch]: 매치 여부 (true: 좋아요, false: 싫어요)
+  /// [favoriteTab]: 좋아요 시 Favorite 탭 구분 ('tutor'|'student'|'fellow'). null이면 탭에 추가 안 함.
   static Future<void> saveMatch({
     required String swipedUserId,
     required String currentUserId,
     required bool isMatch,
     Map<String, dynamic>? swipedProfile,
+    String? favoriteTab,
   }) async {
     print('========================================');
     print('SupabaseService.saveMatch 시작');
@@ -1524,14 +1620,32 @@ class SupabaseService {
         print('  반환된 데이터: $result');
       }
     
-      // If user liked someone, update favorites cache immediately (no DB).
-      // This prevents Home flicker and makes UI reflect likes instantly.
+      // If user liked someone: assign to Favorite tab (if given) and update in-memory caches.
       if (isMatch) {
+        final userId = currentAuthUser.id;
+        if (favoriteTab != null && favoriteTab.isNotEmpty) {
+          try {
+            await supabase.from('favorite_tab_assignments').upsert(
+              {
+                'user_id': userId,
+                'other_user_id': swipedUserId,
+                'tab': favoriteTab,
+              },
+              onConflict: 'user_id,other_user_id',
+            );
+            if (favoriteTab == 'tutor') _favoriteTutorIdsFromChat[userId] = (_favoriteTutorIdsFromChat[userId] ?? {})..add(swipedUserId);
+            if (favoriteTab == 'student') _favoriteStudentIdsFromChat[userId] = (_favoriteStudentIdsFromChat[userId] ?? {})..add(swipedUserId);
+            if (favoriteTab == 'fellow') _favoriteFellowIdsFromChat[userId] = (_favoriteFellowIdsFromChat[userId] ?? {})..add(swipedUserId);
+            if (swipedProfile != null) {
+              favoriteTabAdded.value = (tab: favoriteTab, profile: Map<String, dynamic>.from(swipedProfile));
+            } else {
+              favoriteFromChatVersion.value++;
+            }
+          } catch (_) {}
+        }
         try {
-          final userId = currentAuthUser.id;
           final existing = favoriteTrainersCache.value ?? const <Map<String, dynamic>>[];
           final next = existing.map((e) => Map<String, dynamic>.from(e)).toList();
-
           if (swipedProfile != null) {
             final swipedId = (swipedProfile['user_id'] as String?) ?? swipedUserId;
             final already = next.any((p) => (p['user_id'] as String?) == swipedId);
@@ -1540,13 +1654,8 @@ class SupabaseService {
               await setFavoriteTrainersCacheForUser(userId, next);
             }
           }
-
-          // Background verification (cheap). If DB and cache already match,
-          // this won't trigger a full favorites re-fetch.
           Future.microtask(() => refreshBootstrapCachesIfChanged(userId));
-        } catch (_) {
-          // Ignore cache update errors; DB write already succeeded.
-        }
+        } catch (_) {}
       }
       
       print('========================================');
@@ -1601,10 +1710,111 @@ class SupabaseService {
     });
   }
 
+  /// User stats for Activity Stats widget: profileViewCount, favoriteCount, incoming/outgoing requests.
+  /// Uses RPC get_user_stats when available; falls back to client-side queries otherwise.
+  static Future<Map<String, dynamic>> getUserStats(String userId) async {
+    try {
+      final res = await supabase.rpc('get_user_stats', params: {'p_user_id': userId});
+      if (res == null) return _defaultStats();
+      final m = res is Map ? Map<String, dynamic>.from(res) : null;
+      if (m == null) return _defaultStats();
+      return {
+        'profileViewCount': _toInt(m['profileViewCount'], 0),
+        'favoriteCount': _toInt(m['favoriteCount'], 0),
+        'incomingRequests': _parseRequests(m['incomingRequests']),
+        'outgoingRequests': _parseRequests(m['outgoingRequests']),
+      };
+    } catch (e) {
+      print('getUserStats RPC failed, using fallback: $e');
+      return _getUserStatsFallback(userId);
+    }
+  }
+
+  static int _toInt(dynamic v, int def) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return def;
+  }
+
+  static Map<String, int> _parseRequests(dynamic v) {
+    if (v is Map) {
+      final m = Map<String, dynamic>.from(v);
+      return {
+        'total': _toInt(m['total'], 0),
+        'accepted': _toInt(m['accepted'], 0),
+      };
+    }
+    return {'total': 0, 'accepted': 0};
+  }
+
+  static Map<String, dynamic> _defaultStats() => {
+        'profileViewCount': 0,
+        'favoriteCount': 0,
+        'incomingRequests': {'total': 0, 'accepted': 0},
+        'outgoingRequests': {'total': 0, 'accepted': 0},
+      };
+
+  static Future<Map<String, dynamic>> _getUserStatsFallback(String userId) async {
+    try {
+      int profileViewCount = 0;
+      try {
+        final viewRes = await supabase
+            .from('profile_views')
+            .select('id')
+            .eq('viewed_user_id', userId);
+        profileViewCount = viewRes is List ? viewRes.length : 0;
+      } catch (_) {}
+
+      int favoriteCount = 0;
+      try {
+        final fansRes = await supabase
+            .from('matches')
+            .select('user_id')
+            .eq('swiped_user_id', userId)
+            .eq('is_match', true);
+        favoriteCount = fansRes is List ? fansRes.length : 0;
+      } catch (e) {
+        print('getUserStats fans count failed (check matches RLS): $e');
+      }
+
+      final convos = await getUserConversations(userId, '');
+      int inTotal = 0, inAccepted = 0, outTotal = 0, outAccepted = 0;
+      for (final c in convos) {
+        final trainerId = c['trainer_id'] as String? ?? '';
+        final traineeId = c['trainee_id'] as String? ?? '';
+        final status = (c['status'] as String? ?? '').trim().toLowerCase();
+        final isAccepted = status == 'accepted';
+        if (trainerId == userId) {
+          inTotal++;
+          if (isAccepted) inAccepted++;
+        }
+        if (traineeId == userId) {
+          outTotal++;
+          if (isAccepted) outAccepted++;
+        }
+      }
+
+      return {
+        'profileViewCount': profileViewCount,
+        'favoriteCount': favoriteCount,
+        'incomingRequests': {'total': inTotal, 'accepted': inAccepted},
+        'outgoingRequests': {'total': outTotal, 'accepted': outAccepted},
+      };
+    } catch (e) {
+      print('getUserStats fallback failed: $e');
+      return _defaultStats();
+    }
+  }
+
   static Future<Map<String, dynamic>?> _fetchProfileByUserId(String userId) async {
     final response = await supabase.from('profiles').select().eq('user_id', userId).maybeSingle();
     if (response == null) return null;
-    return Map<String, dynamic>.from(response);
+    final profile = Map<String, dynamic>.from(response);
+
+    final stats = await getUserStats(userId);
+    profile['stats'] = stats;
+
+    return profile;
   }
 
   static Future<Map<String, dynamic>?> getCurrentUserProfileCached(
@@ -1615,7 +1825,19 @@ class SupabaseService {
 
     final cached = currentUserProfileCache.value;
     if (!forceRefresh && _currentUserProfileCacheUserId == userId && cached != null) {
-      // Background refresh only if changed.
+      // If profile was loaded from disk without stats, fetch stats in background and merge.
+      if (cached['stats'] == null) {
+        Future.microtask(() async {
+          try {
+            final stats = await getUserStats(userId);
+            final updated = Map<String, dynamic>.from(cached);
+            updated['stats'] = stats;
+            _currentUserProfileCacheUserId = userId;
+            currentUserProfileCache.value = updated;
+            await _persistProfileToDisk(userId, updated);
+          } catch (_) {}
+        });
+      }
       Future.microtask(() => refreshBootstrapCachesIfChanged(userId));
       return cached;
     }
@@ -1685,6 +1907,197 @@ class SupabaseService {
     _favoriteTrainersCacheUserId = userId;
     favoriteTrainersCache.value = copy;
     await _persistFavoritesToDisk(userId, copy);
+  }
+
+  /// Fetch from DB (syncs across devices). Optional in-memory cache for same session.
+  static Future<Set<String>> _fetchFavoriteTabIdsFromDb(String userId, String tab) async {
+    try {
+      final res = await supabase
+          .from('favorite_tab_assignments')
+          .select('other_user_id')
+          .eq('user_id', userId)
+          .eq('tab', tab);
+      final ids = <String>{};
+      for (final e in res) {
+        final id = (e as Map)['other_user_id']?.toString().trim();
+        if (id != null && id.isNotEmpty) ids.add(id);
+      }
+      if (tab == 'tutor') _favoriteTutorIdsFromChat[userId] = ids;
+      if (tab == 'student') _favoriteStudentIdsFromChat[userId] = ids;
+      if (tab == 'fellow') _favoriteFellowIdsFromChat[userId] = ids;
+      return ids;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<Set<String>> getFavoriteTutorIdsFromChat(String userId) async {
+    final cached = _favoriteTutorIdsFromChat[userId];
+    if (cached != null) return cached;
+    return _fetchFavoriteTabIdsFromDb(userId, 'tutor');
+  }
+
+  static Future<Set<String>> getFavoriteStudentIdsFromChat(String userId) async {
+    final cached = _favoriteStudentIdsFromChat[userId];
+    if (cached != null) return cached;
+    return _fetchFavoriteTabIdsFromDb(userId, 'student');
+  }
+
+  static Future<Set<String>> getFavoriteFellowIdsFromChat(String userId) async {
+    final cached = _favoriteFellowIdsFromChat[userId];
+    if (cached != null) return cached;
+    return _fetchFavoriteTabIdsFromDb(userId, 'fellow');
+  }
+
+  /// Add other user to Tutor tab (I sent request). Writes to DB for cross-device sync.
+  static Future<void> addFavoriteFromChatToTutorTab({
+    required String currentUserId,
+    required String otherUserId,
+    Map<String, dynamic>? otherProfile,
+  }) async {
+    await hydrateCachesFromDisk(currentUserId);
+    try {
+      await supabase.from('favorite_tab_assignments').upsert(
+        {
+          'user_id': currentUserId,
+          'other_user_id': otherUserId,
+          'tab': 'tutor',
+        },
+        onConflict: 'user_id,other_user_id',
+      );
+    } catch (_) {}
+    _favoriteTutorIdsFromChat[currentUserId] = (_favoriteTutorIdsFromChat[currentUserId] ?? {})..add(otherUserId);
+    try {
+      await saveMatch(swipedUserId: otherUserId, currentUserId: currentUserId, isMatch: true, swipedProfile: otherProfile);
+    } catch (_) {}
+    if (otherProfile != null) {
+      favoriteTabAdded.value = (tab: 'tutor', profile: Map<String, dynamic>.from(otherProfile));
+    }
+  }
+
+  /// Add other user to Student tab (they sent request). Writes to DB for cross-device sync.
+  static Future<void> addFavoriteFromChatToStudentTab({
+    required String currentUserId,
+    required String otherUserId,
+    Map<String, dynamic>? otherProfile,
+  }) async {
+    await hydrateCachesFromDisk(currentUserId);
+    try {
+      await supabase.from('favorite_tab_assignments').upsert(
+        {
+          'user_id': currentUserId,
+          'other_user_id': otherUserId,
+          'tab': 'student',
+        },
+        onConflict: 'user_id,other_user_id',
+      );
+    } catch (_) {}
+    _favoriteStudentIdsFromChat[currentUserId] = (_favoriteStudentIdsFromChat[currentUserId] ?? {})..add(otherUserId);
+    try {
+      await saveMatch(swipedUserId: otherUserId, currentUserId: currentUserId, isMatch: true, swipedProfile: otherProfile);
+    } catch (_) {}
+    if (otherProfile != null) {
+      favoriteTabAdded.value = (tab: 'student', profile: Map<String, dynamic>.from(otherProfile));
+    }
+  }
+
+  /// Tutors tab: only users liked from Meet Tutors / Perfect Tutors or chat (I sent request).
+  static Future<List<Map<String, dynamic>>> getFavoriteTutorsTabList(String userId) async {
+    await hydrateCachesFromDisk(userId);
+    final ids = await getFavoriteTutorIdsFromChat(userId);
+    if (ids.isEmpty) return [];
+    try {
+      final res = await supabase.from('profiles').select().inFilter('user_id', ids.toList());
+      final list = res.map((e) => Map<String, dynamic>.from(e)).toList();
+      _sortByName(list);
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Students tab: only users liked from Student Candidates or chat (they sent request).
+  static Future<List<Map<String, dynamic>>> getFavoriteStudentsTabList(String userId) async {
+    await hydrateCachesFromDisk(userId);
+    final ids = await getFavoriteStudentIdsFromChat(userId);
+    if (ids.isEmpty) return [];
+    try {
+      final res = await supabase.from('profiles').select().inFilter('user_id', ids.toList());
+      final list = res.map((e) => Map<String, dynamic>.from(e)).toList();
+      _sortByName(list);
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Fellows tab: only users liked from Fellow tutors in the area.
+  static Future<List<Map<String, dynamic>>> getFavoriteFellowsTabList(String userId) async {
+    await hydrateCachesFromDisk(userId);
+    final ids = await getFavoriteFellowIdsFromChat(userId);
+    if (ids.isEmpty) return [];
+    try {
+      final res = await supabase.from('profiles').select().inFilter('user_id', ids.toList());
+      final list = res.map((e) => Map<String, dynamic>.from(e)).toList();
+      _sortByName(list);
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Remove a user from Favorite tab (all tabs). Also sets match to false.
+  /// [bumpVersion]: when false, UI already updated optimistically; skip notifying so no full refetch.
+  static Future<void> removeFavoriteTabAssignment(
+    String currentUserId,
+    String otherUserId, {
+    bool bumpVersion = true,
+  }) async {
+    _favoriteTutorIdsFromChat[currentUserId]?.remove(otherUserId);
+    _favoriteStudentIdsFromChat[currentUserId]?.remove(otherUserId);
+    _favoriteFellowIdsFromChat[currentUserId]?.remove(otherUserId);
+    if (bumpVersion) favoriteFromChatVersion.value++;
+    try {
+      await supabase
+          .from('favorite_tab_assignments')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('other_user_id', otherUserId);
+    } catch (_) {}
+    try {
+      await supabase.from('matches').update({'is_match': false}).eq('user_id', currentUserId).eq('swiped_user_id', otherUserId);
+    } catch (_) {}
+  }
+
+  /// Blocked users: lesson requests from blocked user are hidden from blocker.
+  static Future<Set<String>> getBlockedUserIds(String userId) async {
+    try {
+      final res = await supabase.from('blocked_users').select('blocked_user_id').eq('user_id', userId);
+      final set = <String>{};
+      for (final e in res) {
+        final id = (e as Map)['blocked_user_id']?.toString().trim();
+        if (id != null && id.isNotEmpty) set.add(id);
+      }
+      return set;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Block a user: their lesson requests will be hidden from you.
+  /// [bumpVersion]: when false, Favorite UI already updated optimistically.
+  static Future<void> blockUser(
+    String blockerUserId,
+    String blockedUserId, {
+    bool bumpVersion = true,
+  }) async {
+    try {
+      await supabase.from('blocked_users').upsert(
+        {'user_id': blockerUserId, 'blocked_user_id': blockedUserId},
+        onConflict: 'user_id,blocked_user_id',
+      );
+    } catch (_) {}
+    await removeFavoriteTabAssignment(blockerUserId, blockedUserId, bumpVersion: bumpVersion);
   }
 
   /// Throttled background refresh: only updates caches if DB changed.

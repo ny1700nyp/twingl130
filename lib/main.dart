@@ -45,9 +45,7 @@ Future<void> main() async {
     }
   }
 
-  // Notification service (used by chat/calendar flows)
-  await NotificationService().initialize();
-  await NotificationService().requestPermissions();
+  // Notification service: set key for deep links; init & permissions deferred so first paint is not blocked.
   NotificationService().setNavigatorKey(navigatorKey);
 
   runApp(const TwinglApp());
@@ -106,6 +104,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
 
+    // Defer notification init so first paint is not blocked (runs in parallel with auth check).
+    Future(() async {
+      await NotificationService().initialize();
+      await NotificationService().requestPermissions();
+    });
+
     // Auth change listener (navigatorKey 사용: 로그아웃 후 /login으로 가면 AuthWrapper가 dispose되므로 context 대신 사용)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final event = data.event;
@@ -143,10 +147,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      // Hydrate device caches first for instant rendering.
-      await SupabaseService.hydrateCachesFromDisk(user.id);
+      // Fast path: if profile exists on disk, show home immediately and hydrate the rest in background.
+      final diskProfile = await SupabaseService.loadProfileFromDiskOnly(user.id);
+      if (diskProfile != null) {
+        SupabaseService.setCurrentUserProfileFromDisk(user.id, diskProfile);
+        if (!mounted) return;
+        setState(() => _showSplash = false);
+        navigatorKey.currentState?.pushReplacementNamed('/home');
+        Future.microtask(() => SupabaseService.hydrateCachesFromDisk(user.id));
+        Future.microtask(() => SupabaseService.refreshBootstrapCachesIfChanged(user.id));
+        return;
+      }
 
-      // Profile check (cache-first)
+      // No profile on disk: full hydrate then profile fetch (e.g. first install or cleared cache).
+      await SupabaseService.hydrateCachesFromDisk(user.id);
       final profile = await SupabaseService.getCurrentUserProfileCached(user.id);
 
       if (!mounted) return;

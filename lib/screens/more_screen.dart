@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../app_navigation.dart' show navigatorKey;
+import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/user_stats_widget.dart';
+import 'general_settings_screen.dart';
 import 'onboarding_screen.dart';
 
 /// Shows a custom dialog explaining the given identity (student, tutor, twiner).
@@ -160,11 +164,11 @@ class _MoreScreenState extends State<MoreScreen> {
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             children: [
-              // User Badge Guide (Twingl Identity)
+              // 1. Identity Badges (S, T, TW)
               const _BadgeGuideCard(),
               const SizedBox(height: 24),
 
-              // Become a Tutor/Student too (Twingl Identity 다음 배치)
+              // 2. Twiner Conversion Card
               if (showTwinerCard) ...[
                 _TwinerConversionCard(
                   isTutor: isTutor,
@@ -179,8 +183,16 @@ class _MoreScreenState extends State<MoreScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Lesson Space Finder
+              // 3. My Activity Stats (real data from UserModel)
+              UserStatsWidget(user: UserModel.fromProfile(profile)),
+              const SizedBox(height: 24),
+
+              // 4. Lesson Space Finder
               const _LessonSpaceFinderCard(),
+              const SizedBox(height: 24),
+
+              // 5. General Settings (bottom)
+              _GeneralSettingsSection(user: user),
             ],
           );
         },
@@ -310,7 +322,7 @@ class _TwinerConversionCard extends StatelessWidget {
               const SizedBox(height: 10),
               _previewRow(context, icon: Icons.auto_awesome_outlined, title: 'The Perfect Tutors, Anywhere'),
             ] else ...[
-              _previewRow(context, icon: Icons.groups_outlined, title: 'Other Tutors in the area'),
+              _previewRow(context, icon: Icons.groups_outlined, title: 'Fellow tutors in the area'),
               const SizedBox(height: 10),
               _previewRow(context, icon: Icons.school_outlined, title: 'Student Candidates in the area'),
             ],
@@ -458,6 +470,117 @@ class _BadgeGuideCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// General Settings: Verification, Notifications, Language, Help, Terms, Logout.
+class _GeneralSettingsSection extends StatelessWidget {
+  const _GeneralSettingsSection({this.user});
+
+  final User? user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Account',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: const Text('Verification'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.notifications_outlined),
+                title: const Text('Notifications'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: const Text('Language'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Support',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Help'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Terms'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            title: Text(
+              'Log out',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            onTap: user == null
+                ? null
+                : () async {
+                    await Supabase.instance.client.auth.signOut();
+                    SupabaseService.clearInMemoryCaches();
+                    if (!context.mounted) return;
+                    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+                  },
+          ),
+        ),
+      ],
     );
   }
 }
