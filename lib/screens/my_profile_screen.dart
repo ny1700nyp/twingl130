@@ -83,13 +83,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         profile: _profile!,
         hideAppBar: false,
         currentUserProfile: _profile,
-        appBarActions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _navigateToEdit,
-            tooltip: 'Edit Profile',
-          ),
-        ],
+        onEditPressed: _navigateToEdit,
       ),
     );
   }

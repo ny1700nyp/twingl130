@@ -6,11 +6,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:convert';
+import '../models/user_model.dart';
 import '../services/supabase_service.dart';
-import 'training_history_screen.dart';
-import 'chat_screen.dart';
-import '../utils/distance_formatter.dart';
 import '../theme/app_theme.dart';
+import '../utils/distance_formatter.dart';
+import '../widgets/avatar_with_type_badge.dart';
+import '../widgets/user_stats_widget.dart';
+import 'chat_screen.dart';
+import 'training_history_screen.dart';
 
 class ProfileDetailScreen extends StatelessWidget {
   final Map<String, dynamic> profile;
@@ -19,12 +22,14 @@ class ProfileDetailScreen extends StatelessWidget {
   final bool hideActionButtons;
   /// When true (e.g. in chat profile sheet), do not show name/age/gender block in body.
   final bool hideNameAgeGenderInBody;
-  /// Optional actions for the AppBar (e.g. Edit for my profile).
+  /// Optional actions for the AppBar (e.g. Edit for my profile). When [onEditPressed] is set and isMyProfile, Share/Edit are shown in My Details card instead.
   final List<Widget>? appBarActions;
   /// When true, hide the distance label below Chat history (e.g. My Favorite detail).
   final bool hideDistance;
   /// When set (e.g. from chat), show a thumbs-up like button on the photo below the link button.
   final VoidCallback? onLikeFromPhoto;
+  /// When set and viewing own profile, Edit button in My Details card calls this.
+  final VoidCallback? onEditPressed;
 
   const ProfileDetailScreen({
     super.key,
@@ -36,6 +41,7 @@ class ProfileDetailScreen extends StatelessWidget {
     this.appBarActions,
     this.hideDistance = false,
     this.onLikeFromPhoto,
+    this.onEditPressed,
   });
 
   String _getPronouns(String? gender) {
@@ -84,6 +90,38 @@ class ProfileDetailScreen extends StatelessWidget {
 
   String _norm(String s) => s.trim().toLowerCase();
 
+  /// Returns ImageProvider for avatar from profile photos (for use when image is hidden).
+  static ImageProvider? _imageProviderFromProfile(Map<String, dynamic> profile) {
+    final profilePhotos = profile['profile_photos'] as List<dynamic>?;
+    final mainPhotoPath = profile['main_photo_path'] as String?;
+    final List<String> photos = [];
+    if (profilePhotos != null && profilePhotos.isNotEmpty) {
+      photos.addAll(profilePhotos.map((p) => p.toString()));
+    } else if (mainPhotoPath != null && mainPhotoPath.isNotEmpty) {
+      photos.add(mainPhotoPath!);
+    }
+    if (photos.isEmpty) return null;
+    final first = photos.first;
+    if (first.startsWith('data:image')) {
+      try {
+        return MemoryImage(base64Decode(first.split(',')[1]));
+      } catch (_) {
+        return null;
+      }
+    }
+    if (first.startsWith('http://') || first.startsWith('https://')) {
+      return NetworkImage(first);
+    }
+    if (!kIsWeb) {
+      try {
+        return FileImage(File(first));
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   // 나이를 "30대", "40대" 형식으로 변환하는 헬퍼 함수
   String _formatAgeRange(int? age, String? createdAt) {
     if (age == null) return '';
@@ -109,6 +147,27 @@ class ProfileDetailScreen extends StatelessWidget {
     int ageRange = (currentAge ~/ 10) * 10;
     
     return '${ageRange}s';
+  }
+
+  Widget _buildDetailChip(BuildContext context, IconData? icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+          const SizedBox(width: 6),
+        ],
+        Text(label, style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurface)),
+      ],
+    );
+  }
+
+  static Color _colorForUserType(String? userType) {
+    final t = (userType ?? '').trim().toLowerCase();
+    if (t == 'student') return AppTheme.twinglMint;
+    if (t == 'tutor') return AppTheme.twinglPurple;
+    if (t == 'twiner') return AppTheme.twinglYellow;
+    return AppTheme.twinglGreen;
   }
 
   /// [highlightColor]: when non-null and highlighted, use purple (goal↔talent) or mint (talent↔goal).
@@ -248,8 +307,51 @@ class ProfileDetailScreen extends StatelessWidget {
     );
   }
 
-  // 프로필 링크 생성
-  String _generateProfileLink() {
+  /// Static helper to build Share app bar button for use in AppBar actions.
+  /// [iconColor] when set, applies to the share icon (e.g. user type color).
+  static Widget buildShareAppBarButton(BuildContext context, Map<String, dynamic> profile, {Color? iconColor}) {
+    final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
+    final isTutorOrTwiner = userType == 'tutor' || userType == 'twiner';
+    if (!isTutorOrTwiner) return const SizedBox.shrink();
+
+    final color = iconColor ?? _colorForUserType(profile['user_type'] as String?);
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.share_outlined, color: color),
+      tooltip: 'Share',
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'copy',
+          child: Row(
+            children: [
+              Icon(Icons.copy, size: 20),
+              SizedBox(width: 12),
+              Text('Copy Link'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'share',
+          child: Row(
+            children: [
+              Icon(Icons.share, size: 20),
+              SizedBox(width: 12),
+              Text('Share'),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        if (value == 'copy') {
+          ProfileDetailScreen._copyProfileLinkStatic(context, profile);
+        } else if (value == 'share') {
+          ProfileDetailScreen._shareProfileStatic(context, profile);
+        }
+      },
+    );
+  }
+
+  static String _generateProfileLinkStatic(Map<String, dynamic> profile) {
     final userId = profile['user_id'] as String?;
     if (userId == null) return '';
     // TODO: 실제 도메인으로 변경
@@ -258,14 +360,17 @@ class ProfileDetailScreen extends StatelessWidget {
 
   // 프로필 링크 복사
   Future<void> _copyProfileLink(BuildContext context) async {
-    final link = _generateProfileLink();
+    await _copyProfileLinkStatic(context, profile);
+  }
+
+  static Future<void> _copyProfileLinkStatic(BuildContext context, Map<String, dynamic> profile) async {
+    final link = _generateProfileLinkStatic(profile);
     if (link.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to generate profile link.')),
       );
       return;
     }
-    
     await Clipboard.setData(ClipboardData(text: link));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -279,17 +384,19 @@ class ProfileDetailScreen extends StatelessWidget {
 
   // 프로필 공유
   Future<void> _shareProfile(BuildContext context) async {
-    final link = _generateProfileLink();
+    await _shareProfileStatic(context, profile);
+  }
+
+  static Future<void> _shareProfileStatic(BuildContext context, Map<String, dynamic> profile) async {
+    final link = _generateProfileLinkStatic(profile);
     if (link.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to generate profile link.')),
       );
       return;
     }
-    
     final name = profile['name'] as String? ?? 'Trainer';
     final shareText = 'Check out $name\'s profile on Twingl!\n$link';
-    
     try {
       await Share.share(shareText);
     } catch (e) {
@@ -505,8 +612,8 @@ class ProfileDetailScreen extends StatelessWidget {
     final talents = profile['talents'] as List<dynamic>?;
     final experienceDescription = profile['experience_description'] as String?;
     final teachingMethods = profile['teaching_methods'] as List<dynamic>?;
-    final parentParticipationWelcomed = profile['parent_participation_welcomed'] as bool? ?? false;
     final tutoringRate = profile['tutoring_rate'] as String?;
+    final parentParticipationWelcomed = profile['parent_participation_welcomed'] as bool? ?? false;
     final aboutMe = (profile['about_me'] as String?)?.trim();
 
     // Student: goals; Twiner: goals or talents
@@ -557,7 +664,7 @@ class ProfileDetailScreen extends StatelessWidget {
     // AppBar에 이름·나이대·성별 표시 (다른 사람 프로필 + 내 프로필 동일 형식)
     final shouldShowCustomAppBar = !hideAppBar;
     
-    // AppBar 제목 생성
+    // AppBar 제목 생성 (내 프로필일 때는 이름만, 다른 사람은 이름+나이대+성별)
     Widget? appBarTitle;
     if (shouldShowCustomAppBar) {
       final ageText = age != null ? _formatAgeRange(age, profile['created_at'] as String?) : null;
@@ -567,20 +674,21 @@ class ProfileDetailScreen extends StatelessWidget {
         if (genderText.isNotEmpty) genderText,
       ].join(' • ');
       
-      appBarTitle = Row(
+      final nameOnly = Flexible(
+        child: Text(
+          name,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+      final nameAndAge = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(
-            child: Text(
-              name,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (ageGenderText.isNotEmpty) ...[
+          nameOnly,
+          if (!isMyProfile && ageGenderText.isNotEmpty) ...[
             const SizedBox(width: 8),
             Text(
               ageGenderText,
@@ -592,6 +700,20 @@ class ProfileDetailScreen extends StatelessWidget {
           ],
         ],
       );
+      appBarTitle = isMyProfile
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AvatarWithTypeBadge(
+                  radius: 18,
+                  backgroundImage: _imageProviderFromProfile(profile),
+                  userType: profile['user_type'] as String?,
+                ),
+                const SizedBox(width: 12),
+                nameOnly,
+              ],
+            )
+          : nameAndAge;
     } else {
       appBarTitle = const Text('Profile Details');
     }
@@ -604,37 +726,43 @@ class ProfileDetailScreen extends StatelessWidget {
     // Tudent의 "I want to learn"용 goals (DB goals 컬럼)
     final twinerGoals = userType == 'twiner' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
 
+    // 내 프로필이고 onEditPressed가 있으면 Share/Edit은 My Details 카드에 표시하므로 AppBar에는 빈 actions
+    final effectiveAppBarActions = (isMyProfile && onEditPressed != null)
+        ? const <Widget>[]
+        : (appBarActions ?? const <Widget>[]);
+
     return Scaffold(
       appBar: hideAppBar ? null : AppBar(
         title: appBarTitle,
         elevation: 0,
-        actions: appBarActions ?? const <Widget>[],
+        actions: effectiveAppBarActions,
       ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 프로필 이미지 슬라이더 (시트 드래그 시 깜빡임 방지: RepaintBoundary로 격리)
-            RepaintBoundary(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  clipBehavior: Clip.antiAlias,
-                  child: _buildPhotoSlider(context, photos, onLikeFromPhoto: onLikeFromPhoto),
+            // 프로필 이미지 슬라이더 (내 프로필이 아닐 때만 표시)
+            if (!isMyProfile)
+              RepaintBoundary(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    clipBehavior: Clip.antiAlias,
+                    child: _buildPhotoSlider(context, photos, onLikeFromPhoto: onLikeFromPhoto),
+                  ),
                 ),
               ),
-            ),
 
             // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
             if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
@@ -754,8 +882,184 @@ class ProfileDetailScreen extends StatelessWidget {
                     SizedBox(height: sectionSpacing),
                   ],
 
-                  // About me (Trainer / Trainee 공통)
-                  if (aboutMe != null && aboutMe.isNotEmpty) ...[
+                  // My Activity Stats (내 프로필일 때만, 카드로 표시)
+                  if (isMyProfile) ...[
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'My Activity Stats',
+                              style: TextStyle(
+                                fontSize: sectionTitleFontSize,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            UserStatsWidget(
+                              user: UserModel.fromProfile(profile),
+                              showTitle: false,
+                              wrapInCard: false,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: sectionSpacing),
+                  ],
+
+                  // My Details (내 프로필일 때: Share/Edit, 거리·성별·나이, 그 외 정보)
+                  if (isMyProfile && onEditPressed != null) ...[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                            // 제목 + Share, Edit (오른쪽 위) — user type 색상 적용
+                            Builder(
+                              builder: (ctx) {
+                                final typeColor = _colorForUserType(profile['user_type'] as String?);
+                                return Row(
+                                  children: [
+                                    Text(
+                                      'My Details',
+                                      style: TextStyle(
+                                        fontSize: sectionTitleFontSize,
+                                        fontWeight: FontWeight.bold,
+                                        color: typeColor,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    ProfileDetailScreen.buildShareAppBarButton(ctx, profile, iconColor: typeColor),
+                                    IconButton(
+                                      icon: Icon(Icons.edit_outlined, color: typeColor),
+                                      onPressed: onEditPressed,
+                                      tooltip: 'Edit Profile',
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            // 도시명, 나이대 (My Details 아래)
+                            ValueListenableBuilder<String?>(
+                              valueListenable: SupabaseService.currentCityCache,
+                              builder: (context, cityValue, _) {
+                                final city = (cityValue ?? '').trim();
+                                final hasCity = city.isNotEmpty;
+                                final hasAge = age != null;
+                                if (!hasCity && !hasAge) return const SizedBox.shrink();
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Wrap(
+                                    spacing: 12,
+                                    runSpacing: 6,
+                                    children: [
+                                      if (hasCity)
+                                        _buildDetailChip(context, Icons.location_on, city),
+                                      if (hasAge)
+                                        _buildDetailChip(
+                                          context,
+                                          null,
+                                          _formatAgeRange(age, profile['created_at'] as String?),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            // About me
+                            if (aboutMe != null && aboutMe.isNotEmpty) ...[
+                              Text('About me', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Text(aboutMe, style: const TextStyle(fontSize: 14, height: 1.35)),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // About the lesson
+                            if ((userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
+                              Text('About the lesson', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Text(experienceDescription, style: const TextStyle(fontSize: 14, height: 1.35)),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // I can teach
+                            if ((userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
+                              Text('I can teach', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: talents.map((t) => _buildProfileChip(context, t.toString(), highlighted: false)).toList(),
+                              ),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // I want to learn (Twiner)
+                            if (userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
+                              Text('I want to learn', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: twinerGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false)).toList(),
+                              ),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // Lesson location
+                            if ((userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
+                              Text('Lesson location', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  if (teachingMethods.contains('onsite')) _buildProfileChip(context, 'Onsite', highlighted: false),
+                                  if (teachingMethods.contains('online')) _buildProfileChip(context, 'Online', highlighted: false),
+                                ],
+                              ),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // Lesson Fee, Parent participation (Lesson location 아래)
+                            if (userType == 'tutor' || userType == 'twiner') ...[
+                              if (tutoringRate != null && tutoringRate.isNotEmpty) ...[
+                                Row(
+                                  children: [
+                                    Icon(Icons.attach_money, color: Theme.of(context).colorScheme.primary, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text('Lesson Fee: \$$tutoringRate/hour', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                                SizedBox(height: sectionSpacing),
+                              ],
+                              Row(
+                                children: [
+                                  Icon(Icons.family_restroom, color: Theme.of(context).colorScheme.secondary, size: 18),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    parentParticipationWelcomed ? 'Parent participation welcomed' : 'Parent participation not specified',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85)),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: sectionSpacing),
+                            ],
+                            // I want to learn (Student)
+                            if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
+                              Text('I want to learn', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: traineeGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false)).toList(),
+                              ),
+                            ],
+                      ],
+                    ),
+                    SizedBox(height: sectionSpacing),
+                  ],
+
+                  // About me (내 프로필이 아니거나 My Details가 없을 때)
+                  if ((!isMyProfile || onEditPressed == null) && aboutMe != null && aboutMe.isNotEmpty) ...[
                     Text(
                       'About me',
                       style: TextStyle(
@@ -773,9 +1077,9 @@ class ProfileDetailScreen extends StatelessWidget {
                     ),
                     SizedBox(height: sectionSpacing),
                   ],
-                  
-                  // Tutor/Stutor: About the lesson (About me 다음)
-                  if ((userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
+
+                  // Tutor/Stutor: About the lesson (About me 다음) — My Details 카드가 있을 때는 카드 내에 이미 표시됨
+                  if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
                     Text(
                       'About the lesson',
                       style: TextStyle(
@@ -795,7 +1099,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Tutor/Twiner: I can teach (talents). Purple = my goal ↔ their talent (I'm Student or Twiner).
-                  if ((userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
+                  if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
                     Text(
                       'I can teach',
                       style: TextStyle(
@@ -857,7 +1161,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   ],
                   
                   // Lesson location (Trainer only)
-                  if ((userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
+                  if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
                     Text(
                       'Lesson location',
                       style: TextStyle(
@@ -879,54 +1183,33 @@ class ProfileDetailScreen extends StatelessWidget {
                     SizedBox(height: sectionSpacing),
                   ],
 
-                  // Trainer 전용: Tutoring rate / Parent participation
-                  if (userType == 'tutor' || userType == 'twiner') ...[
+                  // Lesson Fee, Parent participation (Lesson location 아래)
+                  if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner')) ...[
                     if (tutoringRate != null && tutoringRate.isNotEmpty) ...[
                       Row(
                         children: [
-                          Icon(
-                            Icons.attach_money,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 18,
-                          ),
+                          Icon(Icons.attach_money, color: Theme.of(context).colorScheme.primary, size: 18),
                           const SizedBox(width: 6),
-                          Text(
-                            'Tutoring Rate: \$$tutoringRate/hour',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
+                          Text('Lesson Fee: \$$tutoringRate/hour', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                         ],
                       ),
                       SizedBox(height: sectionSpacing),
                     ],
-                    if (parentParticipationWelcomed) ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.family_restroom,
-                            color: Theme.of(context).colorScheme.secondary,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Parent participation welcomed',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: sectionSpacing),
-                    ],
+                    Row(
+                      children: [
+                        Icon(Icons.family_restroom, color: Theme.of(context).colorScheme.secondary, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          parentParticipationWelcomed ? 'Parent participation welcomed' : 'Parent participation not specified',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85)),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: sectionSpacing),
                   ],
-                  
+
                   // Student 전용: I want to learn (goals). Mint = my talent ↔ their goal (I'm Tutor or Twiner).
-                  if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
+                  if ((!isMyProfile || onEditPressed == null) && userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
                       style: TextStyle(
@@ -1431,10 +1714,11 @@ class _ProfileSheetBody extends StatelessWidget {
     final distanceStr = distanceMeters != null ? formatDistanceMeters(distanceMeters) : null;
     final ageStr = _sheetFormatAgeRange(age, createdAt);
     final genderStr = _sheetGenderLabel(gender);
+    // 내 프로필 topbar에는 아바타·뱃지·이름만 (거리·나이대·성별 제거)
     final subParts = <String>[
-      if (distanceStr != null && distanceStr.isNotEmpty) distanceStr,
-      if (ageStr.isNotEmpty) ageStr,
-      if (genderStr.isNotEmpty) genderStr,
+      if (!isMyProfile && distanceStr != null && distanceStr.isNotEmpty) distanceStr,
+      if (!isMyProfile && ageStr.isNotEmpty) ageStr,
+      if (!isMyProfile && genderStr.isNotEmpty) genderStr,
     ];
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1445,6 +1729,15 @@ class _ProfileSheetBody extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isMyProfile)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: AvatarWithTypeBadge(
+                    radius: 22,
+                    backgroundImage: ProfileDetailScreen._imageProviderFromProfile(profile),
+                    userType: profile['user_type'] as String?,
+                  ),
+                ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1471,15 +1764,6 @@ class _ProfileSheetBody extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isMyProfile && onEditPressed != null)
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    onEditPressed?.call();
-                  },
-                  tooltip: 'Edit Profile',
-                ),
             ],
           ),
         ),
@@ -1492,6 +1776,12 @@ class _ProfileSheetBody extends StatelessWidget {
             hideNameAgeGenderInBody: true,
             hideDistance: hideDistance,
             currentUserProfile: currentUserProfile,
+            onEditPressed: isMyProfile && onEditPressed != null
+                ? () {
+                    Navigator.pop(context);
+                    onEditPressed?.call();
+                  }
+                : null,
           ),
         ),
       ],

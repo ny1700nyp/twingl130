@@ -697,7 +697,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         }
                                         if (ctx.mounted) {
                                           ScaffoldMessenger.of(ctx).showSnackBar(
-                                            const SnackBar(content: Text('Added to Favorite')),
+                                            const SnackBar(content: Text('Added to Liked')),
                                           );
                                         }
                                       }

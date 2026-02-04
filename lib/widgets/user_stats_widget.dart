@@ -6,9 +6,18 @@ import '../theme/app_theme.dart';
 /// Activity stats widget bound to [UserModel] real data.
 /// Displays profile views, fans, and incoming/outgoing request counts.
 class UserStatsWidget extends StatelessWidget {
-  const UserStatsWidget({super.key, required this.user});
+  const UserStatsWidget({
+    super.key,
+    required this.user,
+    this.showTitle = true,
+    this.wrapInCard = true,
+  });
 
   final UserModel user;
+  /// When false, only the stats rows are shown (for use inside expandable section).
+  final bool showTitle;
+  /// When false, no Card wrapper (for use inside expandable section).
+  final bool wrapInCard;
 
   static int _intFrom(dynamic value) {
     if (value == null) return 0;
@@ -34,16 +43,11 @@ class UserStatsWidget extends StatelessWidget {
 
     final scheme = Theme.of(context).colorScheme;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showTitle) ...[
           Text(
             'My Activity Stats',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -52,39 +56,59 @@ class UserStatsWidget extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 16),
-          // Row 1: Popularity (Vanity)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _vanityItem(context, icon: Icons.visibility, color: Colors.blue, count: views, label: 'Views'),
-              _vanityItem(context, icon: Icons.favorite, color: Colors.red, count: fans, label: 'Fans'),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Row 2: Activity (Teaching vs Learning)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _activityColumn(
-                  context,
-                  header: 'Requests Received',
-                  accepted: in_accepted,
-                  total: in_total,
-                ),
-              ),
-              Expanded(
-                child: _activityColumn(
-                  context,
-                  header: 'Requests Sent',
-                  accepted: out_accepted,
-                  total: out_total,
-                ),
-              ),
-            ],
-          ),
         ],
+        // Row 1: Views & Liked (aligned with row 2)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _vanityItem(context, icon: Icons.visibility, color: Colors.blue, count: views, label: 'Views'),
+            ),
+            Expanded(
+              child: _vanityItem(context, icon: Icons.thumb_up, color: AppTheme.twinglGreen, count: fans, label: 'Liked'),
+            ),
+          ],
         ),
+        const SizedBox(height: 20),
+        // Row 2: Requests & Requesteds
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _activityColumn(
+                context,
+                header: 'Requests',
+                accepted: in_accepted,
+                total: in_total,
+              ),
+            ),
+            Expanded(
+              child: _activityColumn(
+                context,
+                header: 'Requesteds',
+                accepted: out_accepted,
+                total: out_total,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    if (!wrapInCard) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: content,
+      );
+    }
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: content,
       ),
     );
   }
@@ -96,29 +120,27 @@ class UserStatsWidget extends StatelessWidget {
     required int count,
     required String label,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              count.toString(),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-            ),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-            ),
-          ],
+        Text(
+          count.toString(),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurface.withOpacity(0.7),
+              ),
         ),
       ],
     );

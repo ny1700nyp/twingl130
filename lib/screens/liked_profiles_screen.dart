@@ -69,7 +69,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
       setState(() => _isLoading = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load favorites: $e')),
+        SnackBar(content: Text('Failed to load liked: $e')),
       );
     }
   }
@@ -112,8 +112,8 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove favorite?'),
-        content: Text('Remove $otherName from your favorites?'),
+        title: const Text('Remove from Liked?'),
+        content: Text('Remove $otherName from your liked list?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -178,7 +178,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit my Favorite'),
+        title: const Text('Edit my Liked'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -186,7 +186,7 @@ class _LikedProfilesScreenState extends State<LikedProfilesScreen> {
               ? ListView(
                   children: const [
                     SizedBox(height: 120),
-                    Center(child: Text('No favorite trainers yet.')),
+                    Center(child: Text('No liked trainers yet.')),
                   ],
                 )
               : ListView.builder(

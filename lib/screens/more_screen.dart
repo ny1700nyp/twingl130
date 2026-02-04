@@ -3,10 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_navigation.dart' show navigatorKey;
-import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/user_stats_widget.dart';
+import 'about_screen.dart';
 import 'general_settings_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -115,6 +114,9 @@ class MoreScreen extends StatefulWidget {
 
 class _MoreScreenState extends State<MoreScreen> {
   bool _converting = false;
+  bool _expandWhatIsTwingl = false;
+  bool _expandTwiner = false;
+  bool _expandLessonSpace = false;
 
   /// user_type·추가 정보는 Save 버튼을 눌렀을 때만 DB에 저장. 여기서는 온보딩만 열고 DB 변경 없음.
   Future<void> _convertToTwinerAndOpenOnboarding(
@@ -164,38 +166,274 @@ class _MoreScreenState extends State<MoreScreen> {
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             children: [
-              // 1. Identity Badges (S, T, TW)
-              const _BadgeGuideCard(),
+              // About US (제일 위)
+              Text(
+                'About US',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () =>
+                          setState(() => _expandWhatIsTwingl = !_expandWhatIsTwingl),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'What is Twingl?',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                    ),
+                              ),
+                            ),
+                            AnimatedRotation(
+                              turns: _expandWhatIsTwingl ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                Icons.expand_more,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.topCenter,
+                      child: _expandWhatIsTwingl
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: _WhatIsTwinglContent(),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    ListTile(
+                      title: const Text(
+                        'Letter from Twingl.',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AboutScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
 
-              // 2. Twiner Conversion Card
+              // Useful links
+              Text(
+                'Useful links',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              _ExpandableSectionCard(
+                title: 'Lesson Space Finder',
+                expanded: _expandLessonSpace,
+                onTap: () => setState(() => _expandLessonSpace = !_expandLessonSpace),
+                child: const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: _LessonSpaceFinderCardContent(),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Become a Tutor/Student too (expandable)
               if (showTwinerCard) ...[
-                _TwinerConversionCard(
-                  isTutor: isTutor,
-                  converting: _converting,
-                  onUnlock: user != null && profile != null
-                      ? () => _convertToTwinerAndOpenOnboarding(
-                            profile,
-                            user.id,
-                          )
-                      : null,
+                _ExpandableSectionCard(
+                  title: isTutor ? 'Become a Student too' : 'Become a Tutor too',
+                  expanded: _expandTwiner,
+                  onTap: () => setState(() => _expandTwiner = !_expandTwiner),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: _TwinerConversionCardContent(
+                      isTutor: isTutor,
+                      converting: _converting,
+                      onUnlock: user != null && profile != null
+                          ? () => _convertToTwinerAndOpenOnboarding(
+                                Map<String, dynamic>.from(profile),
+                                user.id,
+                              )
+                          : null,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
               ],
 
-              // 3. My Activity Stats (real data from UserModel)
-              UserStatsWidget(user: UserModel.fromProfile(profile)),
-              const SizedBox(height: 24),
-
-              // 4. Lesson Space Finder
-              const _LessonSpaceFinderCard(),
-              const SizedBox(height: 24),
-
-              // 5. General Settings (bottom)
+              // Account, Support, Logout
               _GeneralSettingsSection(user: user),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Content for "What is Twingl?" with inline Student/Tutor/Twiner badges.
+class _WhatIsTwinglContent extends StatelessWidget {
+  const _WhatIsTwinglContent();
+
+  static const double _inlineBadgeSize = 14;
+
+  Widget _inlineBadge(Color color, String letter) {
+    return Container(
+      width: _inlineBadgeSize,
+      height: _inlineBadgeSize,
+      margin: const EdgeInsets.only(left: 2, right: 2),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: letter.length > 1 ? 7 : 9,
+          height: 1,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5) ?? const TextStyle();
+    return RichText(
+      text: TextSpan(
+        style: style.copyWith(color: Theme.of(context).colorScheme.onSurface),
+        children: [
+          const TextSpan(
+            text: "The name Twingl is a blend of 'Twin' and 'Mingle', echoing the word 'Twinkle'.\n\n",
+          ),
+          const TextSpan(
+            text: "We believe everyone has Twin",
+          ),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _inlineBadge(AppTheme.twinglYellow, 'TW'),
+          ),
+          const TextSpan(
+            text: " potentials: the curiosity of a student",
+          ),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _inlineBadge(AppTheme.twinglMint, 'S'),
+          ),
+          const TextSpan(
+            text: " and the wisdom of a tutor",
+          ),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _inlineBadge(AppTheme.twinglPurple, 'T'),
+          ),
+          const TextSpan(
+            text: ". "
+            "When we come out to Mingle with our neighbors, sharing what we know and learning what we love, we spark a light in each other.\n\n"
+            "That is when we truly Twinkle—growing brighter, together.",
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card with a tappable title that expands/collapses the child with slide animation.
+class _ExpandableSectionCard extends StatelessWidget {
+  const _ExpandableSectionCard({
+    required this.title,
+    required this.expanded,
+    required this.onTap,
+    required this.child,
+  });
+
+  final String title;
+  final bool expanded;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? child
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
@@ -329,6 +567,114 @@ class _TwinerConversionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Content only (for expandable): body of Twiner conversion without title.
+class _TwinerConversionCardContent extends StatelessWidget {
+  const _TwinerConversionCardContent({
+    required this.isTutor,
+    required this.converting,
+    required this.onUnlock,
+  });
+
+  final bool isTutor;
+  final bool converting;
+  final VoidCallback? onUnlock;
+
+  Widget _previewRow(BuildContext context, {required IconData icon, required String title}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withAlpha(22),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.visible,
+              softWrap: true,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subtext = isTutor
+        ? 'Great teachers never stop learning. Expand your perspective by achieving new goals.'
+        : 'Teaching is the best way to master your skills. Share your talent with neighbors.';
+    final buttonLabel = isTutor ? 'Unlock Student Mode' : 'Unlock Tutor Mode';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          subtext,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85),
+                height: 1.4,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'You will get the Twiner badge.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.twinglYellow,
+                height: 1.3,
+              ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: converting || onUnlock == null ? null : onUnlock,
+            icon: converting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(isTutor ? Icons.school_outlined : Icons.groups_outlined),
+            label: Text(converting ? 'Starting…' : buttonLabel),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (isTutor) ...[
+          _previewRow(context, icon: Icons.search, title: 'Meet Tutors in your area'),
+          const SizedBox(height: 10),
+          _previewRow(context, icon: Icons.auto_awesome_outlined, title: 'The Perfect Tutors, Anywhere'),
+        ] else ...[
+          _previewRow(context, icon: Icons.groups_outlined, title: 'Fellow tutors in the area'),
+          const SizedBox(height: 10),
+          _previewRow(context, icon: Icons.school_outlined, title: 'Student Candidates in the area'),
+        ],
+      ],
     );
   }
 }
@@ -474,6 +820,106 @@ class _BadgeGuideCard extends StatelessWidget {
   }
 }
 
+/// Content only (for expandable): subtitle + badge row.
+class _BadgeGuideCardContent extends StatelessWidget {
+  const _BadgeGuideCardContent();
+
+  static const double _badgeSize = 48;
+
+  Widget _badge(
+    BuildContext context, {
+    required Color color,
+    required String letter,
+    required String label,
+    bool highlight = false,
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: _badgeSize,
+              height: _badgeSize,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: highlight
+                    ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 10, spreadRadius: 1)]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                letter,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: letter.length > 1 ? 14 : 22,
+                  height: 1,
+                ),
+              ),
+            ),
+            if (highlight)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Icon(Icons.star, size: 16, color: AppTheme.twinglYellow),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+        ),
+      ],
+    );
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(_badgeSize),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: content,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Learn, Share, and Connect.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _badge(context, color: AppTheme.twinglMint, letter: 'S', label: 'Student',
+                onTap: () => showIdentityDialog(context, 'student')),
+            _badge(context, color: AppTheme.twinglPurple, letter: 'T', label: 'Tutor',
+                onTap: () => showIdentityDialog(context, 'tutor')),
+            _badge(context, color: AppTheme.twinglYellow, letter: 'TW', label: 'Twiner', highlight: true,
+                onTap: () => showIdentityDialog(context, 'twiner')),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// General Settings: Verification, Notifications, Language, Help, Terms, Logout.
 class _GeneralSettingsSection extends StatelessWidget {
   const _GeneralSettingsSection({this.user});
@@ -506,7 +952,6 @@ class _GeneralSettingsSection extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
                 ),
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.notifications_outlined),
                 title: const Text('Notifications'),
@@ -515,7 +960,6 @@ class _GeneralSettingsSection extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
                 ),
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.language),
                 title: const Text('Language'),
@@ -547,7 +991,6 @@ class _GeneralSettingsSection extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {},
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('Terms'),
@@ -703,6 +1146,87 @@ class _LessonSpaceFinderCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Content only (for expandable): grid of lesson space links.
+class _LessonSpaceFinderCardContent extends StatelessWidget {
+  const _LessonSpaceFinderCardContent();
+
+  static const double _gridSpacing = 12;
+  static const double _gridGap = 12;
+
+  Future<void> _openUrl(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    try {
+      await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link.')),
+        );
+      }
+    }
+  }
+
+  Widget _gridTile(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String url,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withOpacity(0.6),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => _openUrl(context, url),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 32, color: iconColor),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: _gridSpacing,
+      crossAxisSpacing: _gridGap,
+      childAspectRatio: 0.95,
+      children: [
+        _gridTile(context, icon: Icons.local_library, iconColor: Colors.blue,
+            label: 'Public Libraries', url: 'https://www.google.com/search?q=library+room+reservation'),
+        _gridTile(context, icon: Icons.school, iconColor: AppTheme.twinglGreen,
+            label: 'School Facilities', url: 'https://www.facilitron.com/'),
+        _gridTile(context, icon: Icons.camera_indoor, iconColor: Colors.red.shade400,
+            label: 'Creative Studios', url: 'https://www.peerspace.com/'),
+        _gridTile(context, icon: Icons.meeting_room, iconColor: Colors.indigo.shade700,
+            label: 'Meeting Rooms', url: 'https://liquidspace.com/'),
+      ],
     );
   }
 }

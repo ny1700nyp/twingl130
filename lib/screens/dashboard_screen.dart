@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
 import '../utils/time_utils.dart';
 import '../widgets/avatar_with_type_badge.dart';
+import '../widgets/spark_card.dart';
 import 'chat_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int? _lastResetToken;
   final Map<String, ImageProvider> _avatarProviderCache = {};
+  Future<DailyQuote?>? _dailyQuoteFuture;
 
   RealtimeChannel? _conversationsTrainerChannel;
   RealtimeChannel? _conversationsTraineeChannel;
@@ -37,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (user != null) {
       SupabaseService.getChatConversationsCached(user.id);
       _subscribeToConversationsRealtime(user.id);
+      _dailyQuoteFuture = QuoteService.getDailyQuote(userId: user.id);
     }
 
     // When the dashboard list changes, keep per-conversation message subscriptions in sync.
@@ -298,24 +302,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           final list = value;
-          if (list.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: () => SupabaseService.getChatConversationsCached(user.id, forceRefresh: true),
-              child: ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: Text('No conversations yet.')),
-                ],
-              ),
-            );
-          }
+
+          Widget quoteCard = Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            child: FutureBuilder<DailyQuote?>(
+              future: _dailyQuoteFuture,
+              builder: (context, snap) {
+                final q = snap.data;
+                if (q == null) return const SizedBox.shrink();
+                return SparkCard(quote: q.quote, author: q.author);
+              },
+            ),
+          );
 
           return RefreshIndicator(
             onRefresh: () => SupabaseService.getChatConversationsCached(user.id, forceRefresh: true),
-            child: ListView.builder(
-              itemCount: list.length,
-              itemBuilder: (context, i) {
-                final c = list[i];
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: quoteCard),
+                if (list.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 80),
+                      child: Center(child: Text('No conversations yet.')),
+                    ),
+                  )
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final c = list[i];
                 final conversationId = c['id']?.toString() ?? '';
                 if (conversationId.isEmpty) return const SizedBox.shrink();
 
@@ -411,7 +427,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           SupabaseService.refreshChatConversationsIfChanged(user.id);
                         },
                 );
-              },
+                      },
+                      childCount: list.length,
+                    ),
+                  ),
+              ],
             ),
           );
         },

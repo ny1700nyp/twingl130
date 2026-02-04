@@ -225,7 +225,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'my_profile', child: Text('My Profile')),
               PopupMenuItem(value: 'nearby', child: Text('Find Nearby Talent')),
-              PopupMenuItem(value: 'edit_trainers', child: Text('My Favorite Trainers')),
+              PopupMenuItem(value: 'edit_trainers', child: Text('My Liked Trainers')),
               PopupMenuItem(value: 'logout', child: Text('Logout')),
             ],
           ),
@@ -282,7 +282,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text('My Favorite Trainers', style: TextStyle(fontWeight: FontWeight.w700)),
+                child: Text('My Liked Trainers', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
             ),
             ValueListenableBuilder<List<Map<String, dynamic>>?>(
@@ -301,7 +301,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                   return const SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Center(child: Text('No favorite trainers yet.')),
+                      child: Center(child: Text('No liked trainers yet.')),
                     ),
                   );
                 }

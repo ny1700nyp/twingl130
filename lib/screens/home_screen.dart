@@ -7,10 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_theme.dart';
-import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
 import '../widgets/avatar_with_type_badge.dart';
-import '../widgets/spark_card.dart';
 import '../widgets/twingl_wordmark.dart';
 import 'edit_trainers_screen.dart';
 import 'find_nearby_talent_screen.dart';
@@ -29,7 +27,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isResolvingCity = false;
   late final VoidCallback _locationListener;
-  Future<DailyQuote?>? _dailyQuoteFuture;
   final Map<String, ImageProvider> _avatarProviderCache = <String, ImageProvider>{};
   /// Logical tab index: 0=Tutors, 1=Students, 2=Fellows. Visibility depends on user type.
   int _favoriteLogicalIndex = 0;
@@ -123,7 +120,6 @@ class _HomeScreenState extends State<HomeScreen> {
         await SupabaseService.refreshBootstrapCachesIfChanged(user.id);
       }();
       _preloadFavoriteTabCaches(user.id);
-      _dailyQuoteFuture = QuoteService.getDailyQuote(userId: user.id);
     }
 
     _locationListener = () {
@@ -291,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Remove from Favorite'),
-          content: const Text('Remove this person from your Favorite list?'),
+          content: const Text('Remove this person from your Liked list?'),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
             TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
@@ -625,20 +621,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
 
-              // Daily quote (between profile and favorites)
-              if (_dailyQuoteFuture != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-                  child: FutureBuilder<DailyQuote?>(
-                    future: _dailyQuoteFuture,
-                    builder: (context, snap) {
-                      final q = snap.data;
-                      if (q == null) return const SizedBox.shrink();
-                      return SparkCard(quote: q.quote, author: q.author);
-                    },
-                  ),
-                ),
-
               // Home actions by user type: Student / Tutor / Twiner
               ValueListenableBuilder<Map<String, dynamic>?>(
                 valueListenable: SupabaseService.currentUserProfileCache,
@@ -703,7 +685,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: const Text(
-                  'Favorite',
+                  'Liked',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -796,7 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           if (user == null) {
                             return const Padding(
                               padding: EdgeInsets.only(top: 24),
-                              child: Center(child: Text('Sign in to see favorites')),
+                              child: Center(child: Text('Sign in to see liked')),
                             );
                           }
                           final tabIndex = effectiveIndex;
