@@ -19,9 +19,8 @@
   - 매칭: **내 Goals ↔ 상대 Talents** (튜터 찾기), **내 Talents ↔ 상대 Goals** (학생 후보), **내 Talents ↔ 상대 Talents** (다른 트레이너)
 - **SupabaseService**  
   - `getProfileGoals` / `getProfileTalents` / `getEffectiveUserType` / `isTudentProfile`  
-  - `getNearbyTutorsForStudent`, `getGlobalTutorsForStudent`  
-  - `getNearbyTrainersForTutor`, `getNearbyStudentsForTutor`  
-  - `getTalentMatchingCards` (goal↔talent, limit 20)
+  - `getNearbyTutorsForStudent`, `getNearbyTrainersForTutor`, `getNearbyStudentsForTutor`  
+  - `getTalentMatchingCards` ([The Perfect Tutors, Anywhere] 전용, RPC)
 - **HomeScreen**  
   - Student: "Meet Tutors in your area", "The Perfect Tutors, Anywhere"  
   - Tutor: "Other Trainers in the area", "Student Candidates in the area"  

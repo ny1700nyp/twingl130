@@ -1257,8 +1257,8 @@ class SupabaseService {
     }
   }
 
-  /// [Meet Tutors in your area] Student/Twiner: target = Tutor + Twiner; ≤30km.
-  /// Within range, up to 20 are shown: matched (goal↔talent) first, then by distance; unmatched in range can still appear if within top 20.
+  /// [Meet Tutors in your area] Student/Twiner: my goals ↔ target talents; ≤30km; limit 20.
+  /// DB RPC로 처리 후 최대 20개만 fetch.
   static Future<List<Map<String, dynamic>>> getNearbyTutorsForStudent({
     required List<String> myGoals,
     required double currentLatitude,
@@ -1268,176 +1268,41 @@ class SupabaseService {
     int limit = 20,
     Set<String>? preloadedSwipedIds,
   }) async {
-    try {
-      final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
-
-      final profilesFuture = supabase
-          .from('profiles')
-          .select()
-          .inFilter('user_type', ['tutor', 'twiner'])
-          .neq('user_id', currentUserId)
-          .limit(200);
-
-      final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
-        profilesFuture,
-      ]);
-      final likedIds = results[0] as Set<String>;
-      final response = results[1];
-
-      final list = (response as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .where((p) {
-            final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !likedIds.contains(id);
-          })
-          .toList();
-
-      for (final p in list) {
-        final lat = (p['latitude'] as num?)?.toDouble();
-        final lon = (p['longitude'] as num?)?.toDouble();
-        if (lat != null && lon != null) {
-          p['distance_meters'] = Geolocator.distanceBetween(
-            currentLatitude, currentLongitude, lat, lon,
-          );
-        }
-      }
-      list.removeWhere((p) {
-        final d = (p['distance_meters'] as num?)?.toDouble();
-        return d == null || d > maxDistanceMeters;
-      });
-
-      for (final p in list) {
-        final talents = getProfileTalents(p);
-        p['match_count'] = _matchCount(myKeywordsNorm, talents);
-      }
-      // Do not filter out match_count == 0: show up to [limit] within range, matched first then by distance
-      list.sort((a, b) {
-        final ma = (a['match_count'] as int? ?? 0);
-        final mb = (b['match_count'] as int? ?? 0);
-        if (ma != mb) return mb.compareTo(ma);
-        final da = (a['distance_meters'] as num?)?.toDouble() ?? double.infinity;
-        final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
-        return da.compareTo(db);
-      });
-      final result = list.take(limit).toList();
-      final withMatch = result.where((p) => (p['match_count'] as int? ?? 0) > 0).length;
-      debugPrint('[MeetTutors] DB fetched=200 inRange=${list.length} returned=${result.length} '
-          'withMatchCount>0=$withMatch likedIds=${likedIds.length}');
-      return result;
-    } catch (e) {
-      print('getNearbyTutorsForStudent: $e');
-      return [];
-    }
+    return _fetchNearbyFromRpc(
+      rpcName: 'get_nearby_tutors_for_student',
+      currentUserId: currentUserId,
+      currentLatitude: currentLatitude,
+      currentLongitude: currentLongitude,
+      maxDistanceMeters: maxDistanceMeters,
+      limit: limit,
+      tag: 'MeetTutors',
+    );
   }
 
-  /// [The Perfect Tutors, Anywhere] Student/Twiner: my goals ↔ target talents; target = Tutor + Twiner; limit.
-  static Future<List<Map<String, dynamic>>> getGlobalTutorsForStudent({
-    required List<String> myGoals,
-    required String currentUserId,
-    int limit = 30,
-  }) async {
-    try {
-      final swipedIds = await getLikedUserIds(currentUserId);
-      final myKeywordsNorm = myGoals.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
-
-      final response = await supabase
-          .from('profiles')
-          .select()
-          .inFilter('user_type', ['tutor', 'twiner'])
-          .neq('user_id', currentUserId)
-          .limit(limit * 3);
-
-      final list = response
-          .map((e) => Map<String, dynamic>.from(e))
-          .where((p) {
-            final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !swipedIds.contains(id);
-          })
-          .toList();
-
-      for (final p in list) {
-        final talents = getProfileTalents(p);
-        p['match_count'] = _matchCount(myKeywordsNorm, talents);
-      }
-      final filtered = list.where((p) => (p['match_count'] as int? ?? 0) > 0).toList();
-      filtered.sort((a, b) => (b['match_count'] as int? ?? 0).compareTo((a['match_count'] as int? ?? 0)));
-      return filtered.take(limit).toList();
-    } catch (e) {
-      print('getGlobalTutorsForStudent: $e');
-      return [];
-    }
-  }
-
-  /// [Fellow tutors in the area] Tutor/Twiner: my talents ↔ target talents; target = Tutor + Twiner; ≤30km; sort by match count.
+  /// [Fellow tutors in the area] Tutor/Twiner: my talents ↔ target talents; ≤30km; limit 30.
+  /// DB RPC로 처리 후 최대 30개만 fetch.
   static Future<List<Map<String, dynamic>>> getNearbyTrainersForTutor({
     required List<String> myTalents,
     required double currentLatitude,
     required double currentLongitude,
     required String currentUserId,
     double maxDistanceMeters = 30000,
+    int limit = 30,
     Set<String>? preloadedSwipedIds,
   }) async {
-    try {
-      final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
-
-      final profilesFuture = supabase
-          .from('profiles')
-          .select()
-          .inFilter('user_type', ['tutor', 'twiner'])
-          .neq('user_id', currentUserId)
-          .limit(200);
-
-      final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
-        profilesFuture,
-      ]);
-      final likedIds = results[0] as Set<String>;
-      final response = results[1];
-
-      final list = (response as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .where((p) {
-            final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !likedIds.contains(id);
-          })
-          .toList();
-
-      for (final p in list) {
-        final lat = (p['latitude'] as num?)?.toDouble();
-        final lon = (p['longitude'] as num?)?.toDouble();
-        if (lat != null && lon != null) {
-          p['distance_meters'] = Geolocator.distanceBetween(
-            currentLatitude, currentLongitude, lat, lon,
-          );
-        }
-      }
-      list.removeWhere((p) {
-        final d = (p['distance_meters'] as num?)?.toDouble();
-        return d == null || d > maxDistanceMeters;
-      });
-
-      for (final p in list) {
-        final talents = getProfileTalents(p);
-        p['match_count'] = _matchCount(myKeywordsNorm, talents);
-      }
-      // match_count 0이어도 표시 (매칭 많은 순 → 가까운 순 정렬만 유지)
-      list.sort((a, b) {
-        final ma = (a['match_count'] as int? ?? 0);
-        final mb = (b['match_count'] as int? ?? 0);
-        if (ma != mb) return mb.compareTo(ma);
-        final da = (a['distance_meters'] as num?)?.toDouble() ?? double.infinity;
-        final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
-        return da.compareTo(db);
-      });
-      return list;
-    } catch (e) {
-      print('getNearbyTrainersForTutor: $e');
-      return [];
-    }
+    return _fetchNearbyFromRpc(
+      rpcName: 'get_nearby_trainers_for_tutor',
+      currentUserId: currentUserId,
+      currentLatitude: currentLatitude,
+      currentLongitude: currentLongitude,
+      maxDistanceMeters: maxDistanceMeters,
+      limit: limit,
+      tag: 'FellowTutors',
+    );
   }
 
-  /// [Student Candidates in the area] Tutor/Twiner: my talents ↔ target goals; target = Student + Twiner; ≤30km; limit 30.
+  /// [Student Candidates in the area] Tutor/Twiner: my talents ↔ target goals; ≤30km; limit 30.
+  /// DB RPC로 처리 후 최대 30개만 fetch.
   static Future<List<Map<String, dynamic>>> getNearbyStudentsForTutor({
     required List<String> myTalents,
     required double currentLatitude,
@@ -1447,51 +1312,77 @@ class SupabaseService {
     int limit = 30,
     Set<String>? preloadedSwipedIds,
   }) async {
+    return _fetchNearbyFromRpc(
+      rpcName: 'get_nearby_students_for_tutor',
+      currentUserId: currentUserId,
+      currentLatitude: currentLatitude,
+      currentLongitude: currentLongitude,
+      maxDistanceMeters: maxDistanceMeters,
+      limit: limit,
+      tag: 'StudentCandidates',
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchNearbyFromRpc({
+    required String rpcName,
+    required String currentUserId,
+    required double currentLatitude,
+    required double currentLongitude,
+    required double maxDistanceMeters,
+    required int limit,
+    required String tag,
+  }) async {
     try {
-      final myKeywordsNorm = myTalents.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+      final rpcResponse = await supabase.rpc(
+        rpcName,
+        params: {
+          'p_user_id': currentUserId,
+          'p_latitude': currentLatitude,
+          'p_longitude': currentLongitude,
+          'p_max_distance_meters': maxDistanceMeters,
+          'p_limit': limit,
+        },
+      );
 
-      final profilesFuture = supabase
-          .from('profiles')
-          .select()
-          .inFilter('user_type', ['student', 'twiner'])
-          .neq('user_id', currentUserId)
-          .limit(200);
+      final rpcList = rpcResponse as List<dynamic>?;
+      if (rpcList == null || rpcList.isEmpty) {
+        debugPrint('[$tag] RPC returned 0');
+        return [];
+      }
 
-      final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
-        profilesFuture,
-      ]);
-      final likedIds = results[0] as Set<String>;
-      final response = results[1];
-
-      final list = (response as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .where((p) {
-            final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !likedIds.contains(id);
-          })
-          .toList();
-
-      for (final p in list) {
-        final lat = (p['latitude'] as num?)?.toDouble();
-        final lon = (p['longitude'] as num?)?.toDouble();
-        if (lat != null && lon != null) {
-          p['distance_meters'] = Geolocator.distanceBetween(
-            currentLatitude, currentLongitude, lat, lon,
-          );
+      final ids = <String>[];
+      final matchCountMap = <String, int>{};
+      final distanceMap = <String, double>{};
+      for (final row in rpcList) {
+        final m = Map<String, dynamic>.from(row as Map);
+        final uid = m['user_id']?.toString();
+        if (uid != null && uid.isNotEmpty) {
+          ids.add(uid);
+          matchCountMap[uid] = (m['match_count'] as num?)?.toInt() ?? 0;
+          final d = (m['distance_meters'] as num?)?.toDouble();
+          if (d != null) distanceMap[uid] = d;
         }
       }
-      list.removeWhere((p) {
-        final d = (p['distance_meters'] as num?)?.toDouble();
-        return d == null || d > maxDistanceMeters;
-      });
 
-      for (final p in list) {
-        final goals = getProfileGoals(p);
-        p['match_count'] = _matchCount(myKeywordsNorm, goals);
+      final profilesResponse = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('user_id', ids);
+
+      final profiles = (profilesResponse as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+      for (final p in profiles) {
+        final uid = p['user_id']?.toString() ?? '';
+        p['match_count'] = matchCountMap[uid] ?? 0;
+        final dist = distanceMap[uid];
+        if (dist != null) p['distance_meters'] = dist;
       }
-      list.removeWhere((p) => (p['match_count'] as int? ?? 0) == 0);
-      list.sort((a, b) {
+      profiles.sort((a, b) {
+        final orderA = ids.indexOf(a['user_id']?.toString() ?? '');
+        final orderB = ids.indexOf(b['user_id']?.toString() ?? '');
+        if (orderA >= 0 && orderB >= 0) return orderA.compareTo(orderB);
         final ma = (a['match_count'] as int? ?? 0);
         final mb = (b['match_count'] as int? ?? 0);
         if (ma != mb) return mb.compareTo(ma);
@@ -1499,15 +1390,21 @@ class SupabaseService {
         final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
         return da.compareTo(db);
       });
-      return list.take(limit).toList();
+
+      debugPrint('[$tag] RPC matched=${ids.length} profilesFetched=${profiles.length}');
+      return profiles;
     } catch (e) {
-      print('getNearbyStudentsForTutor: $e');
+      print('$rpcName: $e');
       return [];
     }
   }
 
-  /// GlobalTalentMatchingScreen: [The Perfect Tutors, Anywhere] — match MY GOALS ↔ TARGET TALENTS (Student/Twiner only).
-  /// DB RPC로 매칭 수행 후, 매칭된 프로필만 앱으로 반환 (트래픽 절감).
+  /// [The Perfect Tutors, Anywhere] 전용. GlobalTalentMatchingScreen에서만 사용.
+  ///
+  /// 용도: Student/Twiner가 거리 무관하게 매칭되는 Tutor/Twiner 카드를 스와이프.
+  /// 매칭: 내 Goals (I want to learn) ↔ 상대 Talents (I can teach). match_count > 0만 반환.
+  /// 정렬: match_count 많은 순 → 상위 limit개.
+  /// DB RPC(get_talent_matching_profiles)로 매칭 수행 후, 매칭된 프로필만 fetch (트래픽 절감).
   static Future<List<Map<String, dynamic>>> getTalentMatchingCards({
     required String userType,
     required List<String> userTalentsOrGoals,
