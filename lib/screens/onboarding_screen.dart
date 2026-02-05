@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/category_service.dart';
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/time_utils.dart';
 import '../widgets/category_selector_widget.dart';
 
@@ -144,8 +145,11 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       final t = (existing['user_type'] as String?)?.trim().toLowerCase();
       if (t == 'tutor' || t == 'student' || t == 'twiner') {
         // Twiner 전환 플로우: initialUserType twiner이고 기존이 tutor/student면 UI는 twiner 유지(Save 시에만 DB 반영)
-        if (initType == 'twiner' && (t == 'tutor' || t == 'student')) _userType = 'twiner';
-        else _userType = t!;
+        if (initType == 'twiner' && (t == 'tutor' || t == 'student')) {
+          _userType = 'twiner';
+        } else {
+          _userType = t!;
+        }
       }
       _nameController.text = (existing['name'] as String?) ?? '';
       _gender = (existing['gender'] as String?) ?? _gender;
@@ -1224,9 +1228,23 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: SingleChildScrollView(
-                      child: SelectableText(
-                        _showTutorWaiverInStep ? _tutorWaiverText : _studentWaiverText,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                      child: SelectableText.rich(
+                        TextSpan(
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(height: 1.4),
+                          children: AppTheme.textSpansWithTwinglHighlight(
+                            _showTutorWaiverInStep
+                                ? _tutorWaiverText
+                                : _studentWaiverText,
+                            baseStyle: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(height: 1.4) ??
+                                const TextStyle(height: 1.4),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1246,7 +1264,9 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   if (_requiresParentalConsent) ...[
                     Text(
                       _parentalConsentTitle,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                     ),
                     const SizedBox(height: 10),
                     Container(
@@ -1257,9 +1277,21 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: SingleChildScrollView(
-                        child: SelectableText(
-                          _parentalConsentText,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                        child: SelectableText.rich(
+                          TextSpan(
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(height: 1.4),
+                            children: AppTheme.textSpansWithTwinglHighlight(
+                              _parentalConsentText,
+                              baseStyle: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(height: 1.4) ??
+                                  const TextStyle(height: 1.4),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1306,7 +1338,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
           // IMPORTANT: Stepper asserts that the number of steps does not change across updates.
           // Our onboarding flow changes step count depending on Tutor/Student (lesson info step).
           // Use a key that changes when the flow shape changes to force a fresh Stepper instance.
-          key: ValueKey<String>('stepper:${_isEdit ? 'edit' : 'new'}:${_userType}:${_stepKeys().length}'),
+          key: ValueKey<String>('stepper:${_isEdit ? 'edit' : 'new'}:$_userType:${_stepKeys().length}'),
           currentStep: _step.clamp(0, lastStep),
           steps: steps,
           onStepTapped: (i) {

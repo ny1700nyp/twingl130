@@ -22,6 +22,8 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
   bool _isLoading = true;
   bool _isEndOfDeck = false;
   List<Map<String, dynamic>> _cards = [];
+  Set<String> _likedIds = {};
+  String? _lastLoggedTopUserId;
 
   Set<String> _myKeywordsNorm = <String>{};
   final Map<String, ImageProvider> _imageProviderCache = <String, ImageProvider>{};
@@ -214,7 +216,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     ]);
     var myProfile = cacheAndSwiped[0] as Map<String, dynamic>?;
     final swipedIds = cacheAndSwiped[1] as Set<String>;
-    if (myProfile == null) myProfile = await SupabaseService.getCurrentUserProfile();
+    myProfile ??= await SupabaseService.getCurrentUserProfile();
 
     final userType = (myProfile?['user_type'] as String?)?.trim().toLowerCase();
     if (userType == null || userType.isEmpty) {
@@ -256,6 +258,8 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     if (!mounted) return;
     setState(() {
       _cards = cards;
+      _likedIds = swipedIds;
+      _lastLoggedTopUserId = null;
       _isLoading = false;
       _isEndOfDeck = false;
     });
@@ -383,7 +387,19 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
     );
   }
 
-  Widget _buildSwipeCard(BuildContext context, Map<String, dynamic> p) {
+  Widget _buildSwipeCard(BuildContext context, Map<String, dynamic> p, int index) {
+    // Debug: log top card (index 0) once per card change
+    if (index == 0) {
+      final userId = p['user_id'] as String? ?? '';
+      if (userId != _lastLoggedTopUserId) {
+        _lastLoggedTopUserId = userId;
+        final matchCount = p['match_count'] as int? ?? 0;
+        final isLiked = _likedIds.contains(userId);
+        debugPrint('[GlobalTalent] Top card: userId=$userId name=${p['name']} | '
+            'isLiked=$isLiked matchCount=$matchCount | '
+            'myGoals=$_myKeywordsNorm targetTalents=${SupabaseService.getProfileTalents(p)}');
+      }
+    }
     final name = p['name'] as String? ?? 'Unknown';
 
     final distMeters = (p['distance_meters'] as num?)?.toDouble();
@@ -588,7 +604,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
                                   controller: _swiperController,
                                   cardCount: _cards.length,
                                   cardBuilder: (context, index) =>
-                                      _buildSwipeCard(context, _cards[index]),
+                                      _buildSwipeCard(context, _cards[index], index),
                                   swipeOptions: const SwipeOptions.only(left: true, right: true),
                                   backgroundCardCount: 2,
                                   onSwipeEnd: _handleSwipeEnd,

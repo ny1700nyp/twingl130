@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueNotifier, debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -629,7 +629,7 @@ class SupabaseService {
     String? chosenStatus;
     bool hasAcceptedConversation = false;
 
-    if (existing is List && existing.isNotEmpty) {
+    if (existing.isNotEmpty) {
       final list = existing.map((e) => Map<String, dynamic>.from(e)).toList();
 
       Map<String, dynamic>? accepted;
@@ -1320,7 +1320,11 @@ class SupabaseService {
         final db = (b['distance_meters'] as num?)?.toDouble() ?? double.infinity;
         return da.compareTo(db);
       });
-      return list.take(limit).toList();
+      final result = list.take(limit).toList();
+      final withMatch = result.where((p) => (p['match_count'] as int? ?? 0) > 0).length;
+      debugPrint('[MeetTutors] DB fetched=200 inRange=${list.length} returned=${result.length} '
+          'withMatchCount>0=$withMatch likedIds=${likedIds.length}');
+      return result;
     } catch (e) {
       print('getNearbyTutorsForStudent: $e');
       return [];
@@ -1503,57 +1507,66 @@ class SupabaseService {
   }
 
   /// GlobalTalentMatchingScreen: [The Perfect Tutors, Anywhere] — match MY GOALS ↔ TARGET TALENTS (Student/Twiner only).
+  /// DB RPC로 매칭 수행 후, 매칭된 프로필만 앱으로 반환 (트래픽 절감).
   static Future<List<Map<String, dynamic>>> getTalentMatchingCards({
     required String userType,
     required List<String> userTalentsOrGoals,
     required String currentUserId,
-    int limit = 100,
+    int limit = 30,
     Set<String>? preloadedSwipedIds,
   }) async {
     try {
-      // NEW rule: match User's GOALS ↔ Target's TALENTS. Only Student/Twiner see this screen.
-      final targetTypes = ['tutor', 'twiner'];
+      // 1) RPC: DB에서 매칭된 user_id + match_count만 반환
+      final rpcResponse = await supabase.rpc(
+        'get_talent_matching_profiles',
+        params: {
+          'p_user_id': currentUserId,
+          'p_user_type': userType,
+          'p_limit': limit,
+        },
+      );
 
-      final profilesFuture = supabase
+      final rpcList = rpcResponse as List<dynamic>?;
+      if (rpcList == null || rpcList.isEmpty) {
+        debugPrint('[GlobalTalentMatching] RPC returned 0 matches');
+        return [];
+      }
+
+      final ids = <String>[];
+      final matchCountMap = <String, int>{};
+      for (final row in rpcList) {
+        final m = Map<String, dynamic>.from(row as Map);
+        final uid = m['user_id']?.toString();
+        if (uid != null && uid.isNotEmpty) {
+          ids.add(uid);
+          matchCountMap[uid] = (m['match_count'] as num?)?.toInt() ?? 0;
+        }
+      }
+
+      // 2) 매칭된 ID들의 전체 프로필만 fetch (최대 limit개)
+      final profilesResponse = await supabase
           .from('profiles')
           .select()
-          .inFilter('user_type', targetTypes)
-          .neq('user_id', currentUserId)
-          .limit(limit);
+          .inFilter('user_id', ids);
 
-      final results = await Future.wait(<Future<dynamic>>[
-        if (preloadedSwipedIds != null) Future<Set<String>>.value(preloadedSwipedIds) else getLikedUserIds(currentUserId),
-        profilesFuture,
-      ]);
-      final likedIds = results[0] as Set<String>;
-      final response = results[1];
-
-      final keywords = userTalentsOrGoals.map((e) => e.toLowerCase().trim()).where((e) => e.isNotEmpty).toSet();
-      final list = (response as List)
+      final profiles = (profilesResponse as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
-          .where((p) {
-            final id = p['user_id'] as String? ?? '';
-            return id.isNotEmpty && !likedIds.contains(id);
-          })
           .toList();
 
-      int matchCount(Map<String, dynamic> p) {
-        final talents = getProfileTalents(p);
-        return _matchCount(keywords, talents);
+      // 3) match_count 병합, RPC 순서 유지
+      for (final p in profiles) {
+        final uid = p['user_id']?.toString() ?? '';
+        p['match_count'] = matchCountMap[uid] ?? 0;
       }
-
-      for (final p in list) {
-        p['match_count'] = matchCount(p);
-      }
-
-      final filtered = list.where((p) => (p['match_count'] as int? ?? 0) > 0).toList();
-      filtered.sort((a, b) {
-        final ma = (a['match_count'] as int? ?? 0);
-        final mb = (b['match_count'] as int? ?? 0);
-        return mb.compareTo(ma);
+      profiles.sort((a, b) {
+        final orderA = ids.indexOf(a['user_id']?.toString() ?? '');
+        final orderB = ids.indexOf(b['user_id']?.toString() ?? '');
+        if (orderA >= 0 && orderB >= 0) return orderA.compareTo(orderB);
+        return (b['match_count'] as int? ?? 0).compareTo(a['match_count'] as int? ?? 0);
       });
 
-      return filtered.take(limit).toList();
+      debugPrint('[GlobalTalentMatching] RPC matched=${ids.length} profilesFetched=${profiles.length}');
+      return profiles;
     } catch (e) {
       print('Failed to get talent matching cards: $e');
       return [];
@@ -1621,19 +1634,14 @@ class SupabaseService {
       print('반환된 결과 타입: ${result.runtimeType}');
       print('반환된 결과: $result');
       
-      if (result is List) {
-        if (result.isNotEmpty) {
-          print('✓ 저장 성공: 데이터가 반환되었습니다');
-          print('  반환된 레코드 수: ${result.length}');
-          print('  첫 번째 레코드: ${result[0]}');
-        } else {
-          print('⚠ 경고: 빈 리스트가 반환되었습니다');
-        }
-      } else {
+      if (result.isNotEmpty) {
         print('✓ 저장 성공: 데이터가 반환되었습니다');
-        print('  반환된 데이터: $result');
+        print('  반환된 레코드 수: ${result.length}');
+        print('  첫 번째 레코드: ${result[0]}');
+      } else {
+        print('⚠ 경고: 빈 리스트가 반환되었습니다');
       }
-    
+        
       // If user liked someone: assign to Favorite tab (if given) and update in-memory caches.
       if (isMatch) {
         final userId = currentAuthUser.id;
@@ -1776,7 +1784,7 @@ class SupabaseService {
             .from('profile_views')
             .select('id')
             .eq('viewed_user_id', userId);
-        profileViewCount = viewRes is List ? viewRes.length : 0;
+        profileViewCount = viewRes.length;
       } catch (_) {}
 
       int favoriteCount = 0;
@@ -1786,7 +1794,7 @@ class SupabaseService {
             .select('user_id')
             .eq('swiped_user_id', userId)
             .eq('is_match', true);
-        favoriteCount = fansRes is List ? fansRes.length : 0;
+        favoriteCount = fansRes.length;
       } catch (e) {
         print('getUserStats fans count failed (check matches RLS): $e');
       }

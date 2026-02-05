@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 /// Screen showing "Letter to Our Neighbors" — a note on reclaiming our humanity.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -8,7 +10,24 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Letter from Twingl.'),
+        title: RichText(
+          text: TextSpan(
+            style: Theme.of(context)
+                .appBarTheme
+                .titleTextStyle
+                ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+            children: [
+              TextSpan(text: 'Letter from '),
+                TextSpan(
+                  text: 'Twingl',
+                  style: AppTheme.twinglStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -100,13 +119,25 @@ class AboutScreen extends StatelessWidget {
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                   children: [
-                    const TextSpan(text: 'With hope,\n'),
+                    TextSpan(text: 'With hope,\n'),
                     TextSpan(
-                      text: 'The Twingl Team',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
+                      text: 'The ',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            height: 1.5,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                    ),
+                    TextSpan(
+                      text: 'Twingl',
+                      style: AppTheme.twinglStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextSpan(
+                      text: ' Team',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             height: 1.5,
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).colorScheme.onSurface,
@@ -144,57 +175,60 @@ class _LetterSection extends StatelessWidget {
       children: [
         Icon(icon, size: 32, color: iconColor),
         const SizedBox(width: 16),
-        Expanded(
-          child: useRichText
-              ? _buildRichText(context)
-              : Text(
-                  text,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        height: 1.5,
-                      ),
-                ),
-        ),
+        Expanded(child: _buildContent(context)),
       ],
     );
   }
 
-  Widget _buildRichText(BuildContext context) {
+  Widget _buildContent(BuildContext context) {
     final baseStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
           height: 1.5,
+          color: Theme.of(context).colorScheme.onSurface,
         ) ??
         const TextStyle();
-    final boldStyle = baseStyle.copyWith(fontWeight: FontWeight.bold);
-    final defaultColor =
-        baseStyle.copyWith(color: Theme.of(context).colorScheme.onSurface);
 
     final spans = <TextSpan>[];
     final regex = RegExp(r'\*\*(.*?)\*\*');
     var lastEnd = 0;
 
-    for (final match in regex.allMatches(text)) {
-      if (match.start > lastEnd) {
+    void addSegment(String segment, {bool bold = false}) {
+      if (segment.isEmpty) return;
+      if (bold) {
         spans.add(TextSpan(
-          text: text.substring(lastEnd, match.start),
-          style: defaultColor,
+          text: segment,
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ));
+      } else {
+        spans.addAll(AppTheme.textSpansWithTwinglHighlight(
+          segment,
+          baseStyle: baseStyle,
+          twinglFontSize: baseStyle.fontSize,
+          twinglFontWeight: baseStyle.fontWeight,
         ));
       }
-      spans.add(TextSpan(
-        text: match.group(1) ?? '',
-        style: boldStyle.copyWith(
-            color: Theme.of(context).colorScheme.onSurface),
-      ));
-      lastEnd = match.end;
     }
-    if (lastEnd < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastEnd),
-        style: defaultColor,
-      ));
+
+    if (useRichText) {
+      for (final match in regex.allMatches(text)) {
+        if (match.start > lastEnd) {
+          addSegment(text.substring(lastEnd, match.start));
+        }
+        addSegment(match.group(1) ?? '', bold: true);
+        lastEnd = match.end;
+      }
+      if (lastEnd < text.length) {
+        addSegment(text.substring(lastEnd));
+      }
+    } else {
+      addSegment(text);
     }
 
     return RichText(
       text: TextSpan(
-        style: defaultColor,
+        style: baseStyle,
         children: spans,
       ),
     );

@@ -14,13 +14,11 @@ class TwinglWordmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = Theme.of(context).textTheme.titleLarge;
     return Text(
       'Twingl',
-      style: (base ?? const TextStyle()).copyWith(
+      style: AppTheme.twinglStyle(
         fontSize: fontSize,
         fontWeight: fontWeight,
-        color: AppTheme.twinglGreen,
       ),
     );
   }

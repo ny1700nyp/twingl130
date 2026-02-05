@@ -11,6 +11,44 @@ class AppTheme {
   // Wordmark color (테마 그린, primary와 동일)
   static const Color twinglGreen = primaryGreen;
 
+  /// Twingl 브랜드 스타일: theme green + Quicksand. 앱 내 모든 "Twingl" 단어에 사용.
+  static TextStyle twinglStyle({double? fontSize, FontWeight? fontWeight}) =>
+      GoogleFonts.quicksand(
+        fontSize: fontSize ?? 14,
+        fontWeight: fontWeight ?? FontWeight.w600,
+        color: twinglGreen,
+      );
+
+  /// 텍스트에서 "Twingl"을 theme green으로 강조한 TextSpan 리스트 반환.
+  static List<TextSpan> textSpansWithTwinglHighlight(
+    String text, {
+    required TextStyle baseStyle,
+    double? twinglFontSize,
+    FontWeight? twinglFontWeight,
+  }) {
+    final twingl = twinglStyle(
+      fontSize: twinglFontSize ?? baseStyle.fontSize,
+      fontWeight: twinglFontWeight ?? baseStyle.fontWeight,
+    );
+    final regex = RegExp(r'Twingl');
+    final result = <TextSpan>[];
+    var lastEnd = 0;
+    for (final m in regex.allMatches(text)) {
+      if (m.start > lastEnd) {
+        result.add(TextSpan(
+          text: text.substring(lastEnd, m.start),
+          style: baseStyle,
+        ));
+      }
+      result.add(TextSpan(text: m.group(0)!, style: twingl));
+      lastEnd = m.end;
+    }
+    if (lastEnd < text.length) {
+      result.add(TextSpan(text: text.substring(lastEnd), style: baseStyle));
+    }
+    return result.isEmpty ? [TextSpan(text: text, style: baseStyle)] : result;
+  }
+
   // User badge colors (Twingl Identity)
   static const Color twinglMint = Color(0xFF2DD4BF);   // Student (S)
   static const Color twinglPurple = Color(0xFF7C3AED); // Tutor (T)

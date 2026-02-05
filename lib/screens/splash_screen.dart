@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_theme.dart';
 import '../widgets/twingl_wordmark.dart';
 
@@ -10,7 +10,7 @@ class SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     return Scaffold(
       backgroundColor: isDark ? AppTheme.backgroundDark : AppTheme.backgroundLight,
       body: Center(
@@ -22,8 +22,7 @@ class SplashScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'Find the Master Next Door.',
-              style: GoogleFonts.quicksand(
-                fontSize: 18,
+              style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w500,
                 color: AppTheme.secondaryGold,
                 letterSpacing: 0.5,

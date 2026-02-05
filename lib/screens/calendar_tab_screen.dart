@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 
 class CalendarTabScreen extends StatefulWidget {
   final int refreshToken;
@@ -433,6 +435,11 @@ class _CalendarTabScreenState extends State<CalendarTabScreen> {
               SizedBox(
                 width: double.infinity,
                 child: SegmentedButton<int>(
+                  style: SegmentedButton.styleFrom(
+                    side: BorderSide.none,
+                    selectedForegroundColor: AppTheme.twinglGreen,
+                    selectedBackgroundColor: Colors.transparent,
+                  ),
                   segments: [
                     ButtonSegment(value: 0, label: _segLabel('Day')),
                     ButtonSegment(value: 1, label: _segLabel('Week')),

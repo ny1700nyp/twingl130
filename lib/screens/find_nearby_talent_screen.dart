@@ -30,7 +30,9 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
   bool _isLoading = true;
   bool _isEndOfDeck = false;
   List<Map<String, dynamic>> _cards = [];
+  Set<String> _likedIds = {};
   Set<String> _myKeywordsNorm = <String>{};
+  String? _lastLoggedTopUserId;
   final Map<String, ImageProvider> _imageProviderCache = <String, ImageProvider>{};
 
   @override
@@ -212,7 +214,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
       ]);
       var profile = cacheAndSwiped[0] as Map<String, dynamic>?;
       final swipedIds = cacheAndSwiped[1] as Set<String>;
-      if (profile == null) profile = await SupabaseService.getCurrentUserProfile();
+      profile ??= await SupabaseService.getCurrentUserProfile();
 
       final userType = (profile?['user_type'] as String?)?.trim().toLowerCase();
       if (userType == null || userType.isEmpty) {
@@ -277,6 +279,8 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
       if (!mounted) return;
       setState(() {
         _cards = cards;
+        _likedIds = swipedIds;
+        _lastLoggedTopUserId = null;
         _isLoading = false;
         _isEndOfDeck = false;
       });
@@ -462,7 +466,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                               : AppinioSwiper(
                                   controller: _swiperController,
                                   cardCount: _cards.length,
-                                  cardBuilder: (context, index) => _buildCard(context, _cards[index]),
+                                  cardBuilder: (context, index) => _buildCard(context, _cards[index], index),
                                   swipeOptions: const SwipeOptions.only(left: true, right: true),
                                   backgroundCardCount: 2,
                                   onSwipeEnd: _handleSwipeEnd,
@@ -499,7 +503,20 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     );
   }
 
-  Widget _buildCard(BuildContext context, Map<String, dynamic> p) {
+  Widget _buildCard(BuildContext context, Map<String, dynamic> p, int index) {
+    // Debug: log top card (index 0) for Meet Tutors section (once per card change)
+    if (index == 0 && widget.section == FindNearbySection.meetTutors) {
+      final userId = p['user_id'] as String? ?? '';
+      if (userId != _lastLoggedTopUserId) {
+        _lastLoggedTopUserId = userId;
+        final matchCount = p['match_count'] as int? ?? 0;
+        final isLiked = _likedIds.contains(userId);
+        final satisfiesGlobal = matchCount > 0;
+        debugPrint('[FindNearby] Top card: userId=$userId name=${p['name']} | '
+            'isLiked=$isLiked matchCount=$matchCount satisfiesGlobalCriteria=$satisfiesGlobal | '
+            'myGoals=$_myKeywordsNorm targetTalents=${SupabaseService.getProfileTalents(p)}');
+      }
+    }
     final name = p['name'] as String? ?? 'Unknown';
     final talents = widget.section == FindNearbySection.studentCandidates
         ? SupabaseService.getProfileGoals(p)

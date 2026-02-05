@@ -182,10 +182,9 @@ class _AgreementScreenState extends State<AgreementScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -208,11 +207,10 @@ class _AgreementScreenState extends State<AgreementScreen> {
                       // Summary
                       Text(
                         'Summary:',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       ),
                       const SizedBox(height: 12),
                       ...summary.map((item) => Padding(
@@ -220,11 +218,20 @@ class _AgreementScreenState extends State<AgreementScreen> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('• ', style: TextStyle(fontSize: 16)),
+                                Text(
+                                  '• ',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(fontSize: 16),
+                                ),
                                 Expanded(
                                   child: Text(
                                     item,
-                                    style: const TextStyle(fontSize: 16),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(fontSize: 16),
                                   ),
                                 ),
                               ],
@@ -235,11 +242,10 @@ class _AgreementScreenState extends State<AgreementScreen> {
                       // Legal Text
                       Text(
                         'Legal Text:',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       ),
                       const SizedBox(height: 12),
                       Container(
@@ -248,11 +254,35 @@ class _AgreementScreenState extends State<AgreementScreen> {
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          legalText,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            height: 1.5,
+                        child: RichText(
+                          text: TextSpan(
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontSize: 14,
+                                  height: 1.5,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface,
+                                ),
+                            children: AppTheme.textSpansWithTwinglHighlight(
+                              legalText,
+                              baseStyle: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        fontSize: 14,
+                                        height: 1.5,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ) ??
+                                  const TextStyle(
+                                    fontSize: 14,
+                                    height: 1.5,
+                                  ),
+                            ),
                           ),
                         ),
                       ),
@@ -279,15 +309,15 @@ class _AgreementScreenState extends State<AgreementScreen> {
                         : null, // 스크롤하지 않으면 비활성화
                   ),
                   Expanded(
-                    child: Text(
-                      'I agree to the terms and conditions stated above.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _hasScrolledToBottom
-                            ? Colors.black
-                            : Colors.grey,
-                      ),
-                    ),
+                  child: Text(
+                    'I agree to the terms and conditions stated above.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 14,
+                          color: _hasScrolledToBottom
+                              ? Theme.of(context).colorScheme.onSurface
+                              : Colors.grey,
+                        ),
+                  ),
                   ),
                 ],
               ),

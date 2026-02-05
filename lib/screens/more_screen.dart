@@ -81,12 +81,24 @@ void showIdentityDialog(BuildContext context, String type) {
                       ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  description,
-                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black87,
-                        height: 1.4,
-                      ),
+                RichText(
+                  text: TextSpan(
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                          color: Colors.black87,
+                          height: 1.4,
+                        ),
+                    children: AppTheme.textSpansWithTwinglHighlight(
+                      description,
+                      baseStyle: Theme.of(ctx)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: Colors.black87,
+                                height: 1.4,
+                              ) ??
+                          const TextStyle(color: Colors.black87, height: 1.4),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Align(
@@ -193,17 +205,29 @@ class _MoreScreenState extends State<MoreScreen> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                'What is Twingl?',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface,
+                              child: RichText(
+                                text: TextSpan(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                  children: [
+                                    const TextSpan(text: 'What is '),
+                                    TextSpan(
+                                      text: 'Twingl',
+                                      style: AppTheme.twinglStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
+                                    const TextSpan(text: ' ?'),
+                                  ],
+                                ),
                               ),
                             ),
                             AnimatedRotation(
@@ -234,9 +258,28 @@ class _MoreScreenState extends State<MoreScreen> {
                           : const SizedBox.shrink(),
                     ),
                     ListTile(
-                      title: const Text(
-                        'Letter from Twingl.',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      title: RichText(
+                        text: TextSpan(
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface,
+                              ),
+                          children: [
+                            const TextSpan(text: 'Letter from '),
+                            TextSpan(
+                              text: 'Twingl',
+                              style: AppTheme.twinglStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
@@ -264,7 +307,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 expanded: _expandLessonSpace,
                 onTap: () => setState(() => _expandLessonSpace = !_expandLessonSpace),
                 child: const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                   child: _LessonSpaceFinderCardContent(),
                 ),
               ),
@@ -333,13 +376,24 @@ class _WhatIsTwinglContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5) ?? const TextStyle();
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5) ??
+        const TextStyle();
+    final baseStyle =
+        style.copyWith(color: Theme.of(context).colorScheme.onSurface);
     return RichText(
       text: TextSpan(
-        style: style.copyWith(color: Theme.of(context).colorScheme.onSurface),
+        style: baseStyle,
         children: [
-          const TextSpan(
-            text: "The name Twingl is a blend of 'Twin' and 'Mingle', echoing the word 'Twinkle'.\n\n",
+          TextSpan(text: "The name "),
+          TextSpan(
+            text: "Twingl",
+            style: AppTheme.twinglStyle(
+              fontSize: baseStyle.fontSize,
+              fontWeight: baseStyle.fontWeight,
+            ),
+          ),
+          TextSpan(
+            text: " is a blend of 'Twin' and 'Mingle', echoing the word 'Twinkle'.\n\n",
           ),
           const TextSpan(
             text: "We believe everyone has Twin",
@@ -407,8 +461,8 @@ class _ExpandableSectionCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
                             color: Theme.of(context).colorScheme.onSurface,
                           ),
                     ),
@@ -1154,7 +1208,7 @@ class _LessonSpaceFinderCard extends StatelessWidget {
 class _LessonSpaceFinderCardContent extends StatelessWidget {
   const _LessonSpaceFinderCardContent();
 
-  static const double _gridSpacing = 12;
+  static const double _gridSpacing = 6;
   static const double _gridGap = 12;
 
   Future<void> _openUrl(BuildContext context, String url) async {
@@ -1185,12 +1239,12 @@ class _LessonSpaceFinderCardContent extends StatelessWidget {
         onTap: () => _openUrl(context, url),
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 32, color: iconColor),
-              const SizedBox(height: 10),
+              Icon(icon, size: 28, color: iconColor),
+              const SizedBox(height: 6),
               Text(
                 label,
                 textAlign: TextAlign.center,
@@ -1216,7 +1270,7 @@ class _LessonSpaceFinderCardContent extends StatelessWidget {
       crossAxisCount: 2,
       mainAxisSpacing: _gridSpacing,
       crossAxisSpacing: _gridGap,
-      childAspectRatio: 0.95,
+      childAspectRatio: 1.15,
       children: [
         _gridTile(context, icon: Icons.local_library, iconColor: Colors.blue,
             label: 'Public Libraries', url: 'https://www.google.com/search?q=library+room+reservation'),
