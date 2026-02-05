@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -187,111 +188,42 @@ class _MoreScreenState extends State<MoreScreen> {
                     ),
               ),
               const SizedBox(height: 8),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: () =>
-                          setState(() => _expandWhatIsTwingl = !_expandWhatIsTwingl),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: RichText(
-                                text: TextSpan(
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ),
-                                  children: [
-                                    const TextSpan(text: 'What is '),
-                                    TextSpan(
-                                      text: 'Twingl',
-                                      style: AppTheme.twinglStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const TextSpan(text: ' ?'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            AnimatedRotation(
-                              turns: _expandWhatIsTwingl ? 0.5 : 0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                Icons.expand_more,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topCenter,
-                      child: _expandWhatIsTwingl
-                          ? Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: _WhatIsTwinglContent(),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    ListTile(
-                      title: RichText(
-                        text: TextSpan(
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface,
-                              ),
-                          children: [
-                            const TextSpan(text: 'Letter from '),
-                            TextSpan(
-                              text: 'Twingl',
-                              style: AppTheme.twinglStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AboutScreen(),
-                        ),
-                      ),
-                    ),
-                  ],
+              _AboutUsQuoteCard(
+                expandWhatIsTwingl: _expandWhatIsTwingl,
+                onToggleWhatIsTwingl: () =>
+                    setState(() => _expandWhatIsTwingl = !_expandWhatIsTwingl),
+                onTapLetterFromTwingl: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AboutScreen(),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
+
+              // Offer (Become a Tutor/Student too)
+              if (showTwinerCard) ...[
+                Text(
+                  'Offer',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                _OfferQuoteCard(
+                  isTutor: isTutor,
+                  expanded: _expandTwiner,
+                  onTap: () => setState(() => _expandTwiner = !_expandTwiner),
+                  converting: _converting,
+                  onUnlock: user != null && profile != null
+                      ? () => _convertToTwinerAndOpenOnboarding(
+                            Map<String, dynamic>.from(profile),
+                            user.id,
+                          )
+                      : null,
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // Useful links
               Text(
@@ -313,29 +245,6 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Become a Tutor/Student too (expandable)
-              if (showTwinerCard) ...[
-                _ExpandableSectionCard(
-                  title: isTutor ? 'Become a Student too' : 'Become a Tutor too',
-                  expanded: _expandTwiner,
-                  onTap: () => setState(() => _expandTwiner = !_expandTwiner),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: _TwinerConversionCardContent(
-                      isTutor: isTutor,
-                      converting: _converting,
-                      onUnlock: user != null && profile != null
-                          ? () => _convertToTwinerAndOpenOnboarding(
-                                Map<String, dynamic>.from(profile),
-                                user.id,
-                              )
-                          : null,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-
               // Account, Support, Logout
               _GeneralSettingsSection(user: user),
             ],
@@ -346,10 +255,260 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 }
 
+/// About US card with Quote(SparkCard)-style gradient background.
+class _AboutUsQuoteCard extends StatelessWidget {
+  const _AboutUsQuoteCard({
+    required this.expandWhatIsTwingl,
+    required this.onToggleWhatIsTwingl,
+    required this.onTapLetterFromTwingl,
+  });
+
+  final bool expandWhatIsTwingl;
+  final VoidCallback onToggleWhatIsTwingl;
+  final VoidCallback onTapLetterFromTwingl;
+
+  static const Color _deepPurple = Color(0xFF4C1D95);
+  static const Color _mintGreen = Color(0xFF6EE7B7);
+  static const Color _white = Colors.white;
+
+  static const double cardRadius = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(cardRadius),
+        boxShadow: [
+          BoxShadow(
+            color: _deepPurple.withAlpha(40),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _deepPurple,
+            Color(0xFF5B21B6),
+            Color(0xFF34D399),
+            _mintGreen,
+          ],
+          stops: [0.0, 0.35, 0.7, 1.0],
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: -8,
+            right: 4,
+            child: Opacity(
+              opacity: 0.10,
+              child: Text(
+                '"',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 80,
+                  height: 1,
+                  fontWeight: FontWeight.w700,
+                  color: _white,
+                ),
+              ),
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                onTap: onToggleWhatIsTwingl,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: _white.withAlpha(250),
+                                ),
+                            children: [
+                              const TextSpan(text: 'What is '),
+                              TextSpan(
+                                text: 'Twingl',
+                                style: AppTheme.twinglStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ).copyWith(color: _white),
+                              ),
+                              const TextSpan(text: ' ?'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      AnimatedRotation(
+                        turns: expandWhatIsTwingl ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          Icons.expand_more,
+                          color: _white.withAlpha(230),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: expandWhatIsTwingl
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: _WhatIsTwinglContent(useWhiteText: true),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              ListTile(
+                title: RichText(
+                  text: TextSpan(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: _white.withAlpha(250),
+                        ),
+                    children: [
+                      const TextSpan(text: 'Letter from '),
+                      TextSpan(
+                        text: 'Twingl',
+                        style: AppTheme.twinglStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ).copyWith(color: _white),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing: Icon(Icons.chevron_right, color: _white.withAlpha(230)),
+                onTap: onTapLetterFromTwingl,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Offer card (Become a Tutor/Student too) with Quote-style gradient.
+/// Become a Tutor too: mint → gold. Become a Student too: purple → gold.
+class _OfferQuoteCard extends StatelessWidget {
+  const _OfferQuoteCard({
+    required this.isTutor,
+    required this.expanded,
+    required this.onTap,
+    required this.converting,
+    required this.onUnlock,
+  });
+
+  final bool isTutor;
+  final bool expanded;
+  final VoidCallback onTap;
+  final bool converting;
+  final VoidCallback? onUnlock;
+
+  static const Color _white = Colors.white;
+  static const Color _gold = Color(0xFFF59E0B); // twinglYellow
+  static const double cardRadius = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = isTutor ? 'Become a Student too' : 'Become a Tutor too';
+    final gradientColors = isTutor
+        ? [AppTheme.twinglPurple, _gold]
+        : [AppTheme.twinglMint, _gold];
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(cardRadius),
+        boxShadow: [
+          BoxShadow(
+            color: gradientColors.first.withAlpha(40),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: _white.withAlpha(250),
+                          ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: _white.withAlpha(230),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: _TwinerConversionCardContent(
+                      isTutor: isTutor,
+                      converting: converting,
+                      onUnlock: onUnlock,
+                      useWhiteText: true,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Content for "What is Twingl?" with inline Student/Tutor/Twiner badges.
 class _WhatIsTwinglContent extends StatelessWidget {
-  const _WhatIsTwinglContent();
+  const _WhatIsTwinglContent({this.useWhiteText = false});
 
+  final bool useWhiteText;
   static const double _inlineBadgeSize = 14;
 
   Widget _inlineBadge(Color color, String letter) {
@@ -378,20 +537,24 @@ class _WhatIsTwinglContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5) ??
         const TextStyle();
-    final baseStyle =
-        style.copyWith(color: Theme.of(context).colorScheme.onSurface);
+    final baseStyle = useWhiteText
+        ? style.copyWith(color: Colors.white.withAlpha(250))
+        : style.copyWith(color: Theme.of(context).colorScheme.onSurface);
+    final twinglStyle = useWhiteText
+        ? AppTheme.twinglStyle(
+            fontSize: baseStyle.fontSize,
+            fontWeight: baseStyle.fontWeight,
+          ).copyWith(color: Colors.white)
+        : AppTheme.twinglStyle(
+            fontSize: baseStyle.fontSize,
+            fontWeight: baseStyle.fontWeight,
+          );
     return RichText(
       text: TextSpan(
         style: baseStyle,
         children: [
           TextSpan(text: "The name "),
-          TextSpan(
-            text: "Twingl",
-            style: AppTheme.twinglStyle(
-              fontSize: baseStyle.fontSize,
-              fontWeight: baseStyle.fontWeight,
-            ),
-          ),
+          TextSpan(text: "Twingl", style: twinglStyle),
           TextSpan(
             text: " is a blend of 'Twin' and 'Mingle', echoing the word 'Twinkle'.\n\n",
           ),
@@ -441,53 +604,59 @@ class _ExpandableSectionCard extends StatelessWidget {
   final VoidCallback onTap;
   final Widget child;
 
+  static const double cardRadius = 16;
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cardRadius),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
                     ),
-                  ),
-                  AnimatedRotation(
-                    turns: expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.expand_more,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            alignment: Alignment.topCenter,
-            child: expanded
-                ? child
-                : const SizedBox.shrink(),
-          ),
-        ],
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: expanded
+                  ? child
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -631,18 +800,28 @@ class _TwinerConversionCardContent extends StatelessWidget {
     required this.isTutor,
     required this.converting,
     required this.onUnlock,
+    this.useWhiteText = false,
   });
 
   final bool isTutor;
   final bool converting;
   final VoidCallback? onUnlock;
+  final bool useWhiteText;
 
   Widget _previewRow(BuildContext context, {required IconData icon, required String title}) {
+    final scheme = Theme.of(context).colorScheme;
+    final bgColor = useWhiteText ? Colors.white.withAlpha(30) : scheme.surfaceContainerHighest;
+    final iconColor = useWhiteText ? Colors.white : scheme.primary;
+    final textStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+      color: useWhiteText ? Colors.white.withAlpha(250) : null,
+    );
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: bgColor,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -651,10 +830,10 @@ class _TwinerConversionCardContent extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withAlpha(22),
+              color: (useWhiteText ? Colors.white : scheme.primary).withAlpha(useWhiteText ? 40 : 22),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+            child: Icon(icon, color: iconColor),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -663,7 +842,7 @@ class _TwinerConversionCardContent extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.visible,
               softWrap: true,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: textStyle,
             ),
           ),
         ],
@@ -677,6 +856,8 @@ class _TwinerConversionCardContent extends StatelessWidget {
         ? 'Great teachers never stop learning. Expand your perspective by achieving new goals.'
         : 'Teaching is the best way to master your skills. Share your talent with neighbors.';
     final buttonLabel = isTutor ? 'Unlock Student Mode' : 'Unlock Tutor Mode';
+    final textColor = useWhiteText ? Colors.white.withAlpha(250) : Theme.of(context).colorScheme.onSurface.withOpacity(0.85);
+    final badgeColor = useWhiteText ? const Color(0xFFFDE68A) : AppTheme.twinglYellow;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -685,7 +866,7 @@ class _TwinerConversionCardContent extends StatelessWidget {
         Text(
           subtext,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85),
+                color: textColor,
                 height: 1.4,
               ),
         ),
@@ -694,7 +875,7 @@ class _TwinerConversionCardContent extends StatelessWidget {
           'You will get the Twiner badge.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: AppTheme.twinglYellow,
+                color: badgeColor,
                 height: 1.3,
               ),
         ),
@@ -704,16 +885,19 @@ class _TwinerConversionCardContent extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: converting || onUnlock == null ? null : onUnlock,
             icon: converting
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: useWhiteText ? Colors.white : null,
+                    ),
                   )
                 : Icon(isTutor ? Icons.school_outlined : Icons.groups_outlined),
             label: Text(converting ? 'Starting…' : buttonLabel),
             style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              backgroundColor: useWhiteText ? Colors.white : Theme.of(context).colorScheme.primary,
+              foregroundColor: useWhiteText ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
@@ -993,36 +1177,40 @@ class _GeneralSettingsSection extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 8),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.verified_user_outlined),
-                title: const Text('Verification'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: const Text('Verification'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.notifications_outlined),
-                title: const Text('Notifications'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                ListTile(
+                  leading: const Icon(Icons.notifications_outlined),
+                  title: const Text('Notifications'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: const Text('Language'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: const Text('Language'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -1034,47 +1222,55 @@ class _GeneralSettingsSection extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 8),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.help_outline),
-                title: const Text('Help'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: const Text('Terms'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {},
-              ),
-            ],
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.help_outline),
+                  title: const Text('Help'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: const Text('Terms'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {},
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
-            title: Text(
-              'Log out',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.error,
+        SizedBox(
+          width: double.infinity,
+          child: Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+              title: Text(
+                'Log out',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
+              onTap: user == null
+                  ? null
+                  : () async {
+                      await Supabase.instance.client.auth.signOut();
+                      SupabaseService.clearInMemoryCaches();
+                      if (!context.mounted) return;
+                      navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+                    },
             ),
-            onTap: user == null
-                ? null
-                : () async {
-                    await Supabase.instance.client.auth.signOut();
-                    SupabaseService.clearInMemoryCaches();
-                    if (!context.mounted) return;
-                    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
-                  },
           ),
         ),
       ],
