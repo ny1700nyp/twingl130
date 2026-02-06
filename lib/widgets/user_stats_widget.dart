@@ -34,12 +34,12 @@ class UserStatsWidget extends StatelessWidget {
     final fans = _intFrom(stats['favoriteCount']);
 
     final incoming = stats['incomingRequests'] is Map ? stats['incomingRequests'] as Map : null;
-    final in_accepted = _intFrom(incoming?['accepted']);
-    final in_total = _intFrom(incoming?['total']);
+    final inAccepted = _intFrom(incoming?['accepted']);
+    final inTotal = _intFrom(incoming?['total']);
 
     final outgoing = stats['outgoingRequests'] is Map ? stats['outgoingRequests'] as Map : null;
-    final out_accepted = _intFrom(outgoing?['accepted']);
-    final out_total = _intFrom(outgoing?['total']);
+    final outAccepted = _intFrom(outgoing?['accepted']);
+    final outTotal = _intFrom(outgoing?['total']);
 
     final scheme = Theme.of(context).colorScheme;
 
@@ -78,16 +78,16 @@ class UserStatsWidget extends StatelessWidget {
               child: _activityColumn(
                 context,
                 header: 'Requests',
-                accepted: in_accepted,
-                total: in_total,
+                accepted: inAccepted,
+                total: inTotal,
               ),
             ),
             Expanded(
               child: _activityColumn(
                 context,
                 header: 'Requesteds',
-                accepted: out_accepted,
-                total: out_total,
+                accepted: outAccepted,
+                total: outTotal,
               ),
             ),
           ],

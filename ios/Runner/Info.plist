@@ -59,5 +59,8 @@
 		<!-- 캘린더 권한 -->
 		<key>NSCalendarsUsageDescription</key>
 		<string>This app can add events from chat messages to your calendar.</string>
+		<!-- add_2_calendar: location autocomplete when Apple's calendar UI opens -->
+		<key>NSContactsUsageDescription</key>
+		<string>This app uses contacts for calendar event location autocomplete.</string>
 	</dict>
 </plist>

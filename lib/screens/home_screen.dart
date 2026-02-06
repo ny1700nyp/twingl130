@@ -40,7 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<Map<String, dynamic>>>? _inFlightFavoriteFellows;
   void Function()? _favAddedListenerRef;
   void _invalidateFavoriteTabCache() {
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _cachedFavoriteTutors = null;
       _cachedFavoriteStudents = null;
       _cachedFavoriteFellows = null;
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _inFlightFavoriteStudents = null;
       _inFlightFavoriteFellows = null;
     });
+    }
   }
 
   /// Preload all three Favorite tab lists in background so tab switch is instant.
@@ -105,12 +107,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     SupabaseService.favoriteFromChatVersion.addListener(_invalidateFavoriteTabCache);
-    void _favAddedListener() {
+    void favAddedListener() {
       final payload = SupabaseService.favoriteTabAdded.value;
       if (payload != null) _onFavoriteTabAdded(payload);
     }
-    SupabaseService.favoriteTabAdded.addListener(_favAddedListener);
-    _favAddedListenerRef = _favAddedListener;
+    SupabaseService.favoriteTabAdded.addListener(favAddedListener);
+    _favAddedListenerRef = favAddedListener;
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       // Ensure disk caches hydrate before running the "only-if-changed" refresh.

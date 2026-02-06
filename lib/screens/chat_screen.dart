@@ -12,6 +12,7 @@ import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
 import '../utils/time_utils.dart';
+import '../widgets/schedule_message_bubble.dart';
 import 'profile_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -117,6 +118,11 @@ class _ChatScreenState extends State<ChatScreen> {
           break;
         }
       }
+    }
+    if (kDebugMode) {
+      debugPrint('[chat] _loadConversationAndMessages: filteredCount=${filtered.length} '
+          'firstUnreadId=$firstUnreadId firstUnreadIndex=$firstUnreadIndex '
+          'hasUnread=${firstUnreadId != null}');
     }
 
     setState(() {
@@ -279,22 +285,45 @@ class _ChatScreenState extends State<ChatScreen> {
   static const double _estimatedItemHeight = 72.0;
 
   void _scrollToInitialPosition() {
-    if (!_scrollController.hasClients) return;
+    if (kDebugMode) {
+      debugPrint('[chat] _scrollToInitialPosition: hasClients=${_scrollController.hasClients} '
+          'firstUnreadId=$_firstUnreadMessageId firstUnreadIndex=$_firstUnreadMessageIndex '
+          'filteredCount=$_filteredMessageCount');
+    }
+    if (!_scrollController.hasClients) {
+      if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition: no clients, scheduling retry');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) _scrollToInitialPosition();
+        else if (mounted && !_scrollController.hasClients) {
+          if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition: still no clients, showing content anyway');
+          setState(() => _initialScrollApplied = true);
+        }
+      });
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
+      if (kDebugMode) {
+        debugPrint('[chat] _scrollToInitialPosition frame: maxScrollExtent=${pos.maxScrollExtent} '
+            'pixels=${pos.pixels} viewportDimension=${pos.viewportDimension}');
+      }
       if (_firstUnreadMessageId != null && _firstUnreadMessageIndex != null) {
         // ListView.builder builds lazily; first jump to approximate position so the item gets built.
-        // If approxOffset exceeds maxScrollExtent (estimate too high), use proportional position.
         final approxOffset = _firstUnreadMessageIndex! * _estimatedItemHeight;
         final totalCount = _filteredMessageCount ?? 200;
         final targetOffset = approxOffset <= pos.maxScrollExtent
             ? approxOffset.clamp(0.0, pos.maxScrollExtent)
             : (_firstUnreadMessageIndex! / totalCount) * pos.maxScrollExtent;
-        _scrollController.jumpTo(targetOffset.clamp(0.0, pos.maxScrollExtent));
+        final clamped = targetOffset.clamp(0.0, pos.maxScrollExtent);
+        if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition unread branch: approxOffset=$approxOffset '
+            'targetOffset=$targetOffset clamped=$clamped totalCount=$totalCount');
+        _scrollController.jumpTo(clamped);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           final hasContext = _firstUnreadKey.currentContext != null;
+          if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition ensureVisible: hasContext=$hasContext');
           if (hasContext) {
             Scrollable.ensureVisible(
               _firstUnreadKey.currentContext!,
@@ -305,11 +334,21 @@ class _ChatScreenState extends State<ChatScreen> {
           }
           if (mounted) setState(() => _initialScrollApplied = true);
         });
-      } else if (_scrollController.hasClients) {
-        _scrollController.jumpTo(
-          _scrollController.position.maxScrollExtent + 120,
-        );
+      } else {
+        final toEnd = pos.maxScrollExtent + 120;
+        if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition all-read branch: jumpTo=$toEnd maxScrollExtent=${pos.maxScrollExtent}');
+        _scrollController.jumpTo(toEnd);
         if (mounted) setState(() => _initialScrollApplied = true);
+        // ListView.builder is lazy; maxScrollExtent can be 0 on first frame. Retry scroll to end after layout.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          final p = _scrollController.position;
+          if (p.maxScrollExtent > 0) {
+            final toBottom = p.maxScrollExtent + 120;
+            if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition all-read retry: maxScrollExtent=${p.maxScrollExtent} jumpTo=$toBottom');
+            _scrollController.jumpTo(toBottom);
+          }
+        });
       }
     });
   }
@@ -422,6 +461,91 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = (m['content'] as String?) ?? (m['message_text'] as String?) ?? '';
     // Hide legacy calendar system messages in the new UX.
     return text.contains('Added') && text.contains('Calendar');
+  }
+
+  Future<void> _showProposeLessonSheet(BuildContext context) async {
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ProposeLessonSheetContent(
+        onSend: (data) => Navigator.of(ctx).pop(data),
+      ),
+    );
+    if (result != null) {
+      await _sendScheduleProposal(result);
+    }
+  }
+
+  Future<void> _sendScheduleProposal(Map<String, dynamic> data) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final status = _conversationStatus();
+    if (status != 'accepted') return;
+    if (_isSending) return;
+
+    setState(() => _isSending = true);
+
+    final lessonDate = data['lessonDate'] as String? ?? '';
+    final location = data['location'] as String? ?? '';
+    final durationMinutes = data['durationMinutes'] as int? ?? 60;
+
+    final clientId =
+        '${user.id}:${DateTime.now().microsecondsSinceEpoch}:${Random().nextInt(0x7fffffff)}';
+    final metadata = <String, dynamic>{
+      'client_id': clientId,
+      'type': 'schedule_proposal',
+      'lessonDate': lessonDate,
+      'location': location,
+      'durationMinutes': durationMinutes,
+    };
+
+    String displayDate = '—';
+    if (lessonDate.isNotEmpty) {
+      try {
+        displayDate = DateFormat('MMM d (EEE), h:mm a')
+            .format(DateTime.parse(lessonDate).toLocal());
+      } catch (_) {
+        displayDate = lessonDate;
+      }
+    }
+    final messageText =
+        'Lesson proposal: $displayDate${location.isNotEmpty ? ' at $location' : ''}';
+
+    final optimistic = <String, dynamic>{
+      'id': 'local-${DateTime.now().microsecondsSinceEpoch}',
+      'conversation_id': widget.conversationId,
+      'sender_id': user.id,
+      'content': messageText,
+      'message_text': messageText,
+      'metadata': metadata,
+      'type': 'schedule_proposal',
+      'is_read': true,
+      'created_at': TimeUtils.nowUtcIso(),
+    };
+    SupabaseService.upsertChatMessageIntoCache(
+      userId: user.id,
+      conversationId: widget.conversationId,
+      message: optimistic,
+    );
+    _scrollToBottom();
+
+    try {
+      await SupabaseService.sendMessage(
+        conversationId: widget.conversationId,
+        senderId: user.id,
+        messageText: messageText,
+        type: 'schedule_proposal',
+        metadata: metadata,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send proposal: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -683,6 +807,34 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final text = (m['content'] as String?) ?? (m['message_text'] as String?) ?? '';
     final type = (m['type'] as String?) ?? 'text';
+
+    // Schedule proposal message: render custom bubble with Add to Calendar
+    final meta = m['metadata'];
+    final metaMap = meta is Map<String, dynamic>
+        ? meta
+        : (meta is Map ? Map<String, dynamic>.from(meta) : null);
+    final metaType = metaMap?['type'] as String?;
+    if (type == 'schedule_proposal' ||
+        (type == 'text' && metaType == 'schedule_proposal')) {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 227),
+            child: ScheduleMessageBubble(
+              metadata: metaMap ?? const {},
+              senderDisplayName: isMe ? null : (widget.otherProfile?['name'] as String?),
+              isMe: isMe,
+              timestamp: _timestampLabel(
+                prev: prevMessage == null ? null : _messageCreatedAtLocal(prevMessage),
+                curr: _messageCreatedAtLocal(m),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     final isSystem = _isSystem(m);
     final ts = _timestampLabel(
@@ -1104,6 +1256,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   final showContent = _initialScrollApplied;
                   final showTopLoader = _isLoadingMore;
                   final itemCount = messages.length + (showTopLoader ? 1 : 0);
+                  if (kDebugMode) {
+                    debugPrint('[chat] ListView build: messageCount=${messages.length} '
+                        'showContent=$showContent itemCount=$itemCount '
+                        'firstUnreadId=$_firstUnreadMessageId');
+                  }
 
                   return Stack(
                     children: [
@@ -1161,13 +1318,39 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Row(
                 children: [
+                  Material(
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: (chatEnabled && !_isSending) ? () => _showProposeLessonSheet(context) : null,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [AppTheme.primaryGreen, AppTheme.twinglPurple],
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.calendar_month,
+                          color: (chatEnabled && !_isSending)
+                              ? Colors.white.withAlpha(250)
+                              : Colors.white.withAlpha(120),
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       controller: _controller,
                       focusNode: _inputFocusNode,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
-                      // Keep input active even while sending; only disable the send button.
                       enabled: chatEnabled,
                       decoration: InputDecoration(
                         hintText: showPending
@@ -1194,3 +1377,121 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+/// Stateful content for the Propose Lesson bottom sheet.
+/// Owns the TextEditingController so it is disposed when the sheet is closed.
+class _ProposeLessonSheetContent extends StatefulWidget {
+  final void Function(Map<String, dynamic> data) onSend;
+
+  const _ProposeLessonSheetContent({required this.onSend});
+
+  @override
+  State<_ProposeLessonSheetContent> createState() =>
+      _ProposeLessonSheetContentState();
+}
+
+class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> {
+  late final TextEditingController _locationController;
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay _selectedTime = TimeOfDay.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _locationController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _locationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Propose Lesson',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            title: Text(
+              DateFormat('EEEE, MMM d, y').format(_selectedDate),
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            trailing: const Icon(Icons.calendar_today),
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _selectedDate,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null && mounted) {
+                setState(() => _selectedDate = picked);
+              }
+            },
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            title: Text(
+              _selectedTime.format(context),
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            trailing: const Icon(Icons.access_time),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _selectedTime,
+              );
+              if (picked != null && mounted) {
+                setState(() => _selectedTime = picked);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _locationController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Location',
+              hintText: 'e.g. Santa Teresa Library, Zoom',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () {
+              final dt = DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day,
+                _selectedTime.hour,
+                _selectedTime.minute,
+              );
+              widget.onSend(<String, dynamic>{
+                'lessonDate': dt.toUtc().toIso8601String(),
+                'location': _locationController.text.trim(),
+                'durationMinutes': 60,
+              });
+              // onSend calls Navigator.pop(data), closing the sheet
+            },
+            child: const Text('Send Proposal'),
+          ),
+        ],
+        ),
+      ),
+    );
+  }
+}
