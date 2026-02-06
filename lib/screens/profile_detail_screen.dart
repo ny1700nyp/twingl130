@@ -98,7 +98,7 @@ class ProfileDetailScreen extends StatelessWidget {
     if (profilePhotos != null && profilePhotos.isNotEmpty) {
       photos.addAll(profilePhotos.map((p) => p.toString()));
     } else if (mainPhotoPath != null && mainPhotoPath.isNotEmpty) {
-      photos.add(mainPhotoPath!);
+      photos.add(mainPhotoPath);
     }
     if (photos.isEmpty) return null;
     final first = photos.first;
@@ -513,6 +513,16 @@ class ProfileDetailScreen extends StatelessWidget {
     final parentNavigator = Navigator.of(context);
     final parentMessenger = ScaffoldMessenger.of(context);
 
+    final effectiveProfile = currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
+    final currentUserType = (effectiveProfile?['user_type'] as String?)?.trim().toLowerCase();
+    final List<String> currentUserGoals = (currentUserType == 'student' || currentUserType == 'twiner')
+        ? ((effectiveProfile?['goals'] as List<dynamic>?) ??
+                (effectiveProfile?['talents'] as List<dynamic>?) ??
+                const <dynamic>[])
+            .map((e) => e.toString().trim().toLowerCase())
+            .toList()
+        : const <String>[];
+
     showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -522,6 +532,7 @@ class ProfileDetailScreen extends StatelessWidget {
         trainerName: trainerName,
         availableSkills: talents.map((e) => e.toString()).toList(),
         availableMethods: teachingMethods.map((e) => e.toString()).toList(),
+        currentUserGoals: currentUserGoals,
       ),
     ).then((conversationId) {
       if (conversationId == null) return;
@@ -1254,12 +1265,14 @@ class _RequestTrainModal extends StatefulWidget {
   final String trainerName;
   final List<String> availableSkills;
   final List<String> availableMethods;
+  final List<String> currentUserGoals;
 
   const _RequestTrainModal({
     required this.trainerId,
     required this.trainerName,
     required this.availableSkills,
     required this.availableMethods,
+    this.currentUserGoals = const [],
   });
 
   @override
@@ -1328,11 +1341,16 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                     children: widget.availableSkills.map((skill) {
                       final isSelected = _selectedSkill == skill;
                       final scheme = Theme.of(context).colorScheme;
+                      final isMatch = widget.currentUserGoals.contains(skill.trim().toLowerCase());
                       return FilterChip(
                         label: Text(
                           skill,
                           style: TextStyle(
-                            color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                            color: isSelected
+                                ? scheme.onPrimary
+                                : isMatch
+                                    ? Colors.white
+                                    : scheme.onSurface,
                             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                           ),
                         ),
@@ -1342,12 +1360,12 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                             _selectedSkill = selected ? skill : null;
                           });
                         },
-                        backgroundColor: scheme.surfaceContainerHighest,
+                        backgroundColor: isMatch && !isSelected
+                            ? AppTheme.twinglPurple.withOpacity(0.9)
+                            : scheme.surfaceContainerHighest,
                         selectedColor: scheme.primary,
                         checkmarkColor: scheme.onPrimary,
-                        side: BorderSide(
-                          color: isSelected ? scheme.primary : scheme.outline.withOpacity(0.5),
-                        ),
+                        side: BorderSide.none,
                       );
                     }).toList(),
                   ),
@@ -1385,9 +1403,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                         backgroundColor: scheme.surfaceContainerHighest,
                         selectedColor: scheme.primary,
                         checkmarkColor: scheme.onPrimary,
-                        side: BorderSide(
-                          color: isSelected ? scheme.primary : scheme.outline.withOpacity(0.5),
-                        ),
+                        side: BorderSide.none,
                       );
                     }).toList(),
                   ),
