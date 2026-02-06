@@ -327,8 +327,6 @@ class _AboutUsQuoteCard extends StatelessWidget {
   final VoidCallback onToggleWhatIsTwingl;
   final VoidCallback onTapLetterFromTwingl;
 
-  static const Color _deepPurple = Color(0xFF4C1D95);
-  static const Color _mintGreen = Color(0xFF6EE7B7);
   static const Color _white = Colors.white;
 
   static const double cardRadius = 16;
@@ -341,7 +339,7 @@ class _AboutUsQuoteCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(cardRadius),
         boxShadow: [
           BoxShadow(
-            color: _deepPurple.withAlpha(40),
+            color: AppTheme.twinglPurple.withAlpha(40),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -350,12 +348,11 @@ class _AboutUsQuoteCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            _deepPurple,
-            Color(0xFF5B21B6),
-            Color(0xFF34D399),
-            _mintGreen,
+            AppTheme.twinglPurple,
+            AppTheme.twinglMint,
+            AppTheme.twinglYellow,
           ],
-          stops: [0.0, 0.35, 0.7, 1.0],
+          stops: [0.0, 0.5, 1.0],
         ),
       ),
       clipBehavior: Clip.antiAlias,
