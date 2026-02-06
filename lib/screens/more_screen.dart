@@ -129,6 +129,7 @@ class MoreScreen extends StatefulWidget {
 class _MoreScreenState extends State<MoreScreen> {
   bool _converting = false;
   bool _expandWhatIsTwingl = false;
+  bool _expandPaymentGuide = false;
   bool _expandTwiner = false;
   bool _expandLessonSpace = false;
 
@@ -198,6 +199,21 @@ class _MoreScreenState extends State<MoreScreen> {
                     builder: (_) => const AboutScreen(),
                   ),
                 ),
+              ),
+              const SizedBox(height: 24),
+
+              // Payment guide
+              Text(
+                'Payment guide',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              _PaymentGuideQuoteCard(
+                expanded: _expandPaymentGuide,
+                onTap: () => setState(() => _expandPaymentGuide = !_expandPaymentGuide),
               ),
               const SizedBox(height: 24),
 
@@ -444,6 +460,105 @@ class _AboutUsQuoteCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Payment guide card with Quote-style gradient (same content as chat payment notice).
+class _PaymentGuideQuoteCard extends StatelessWidget {
+  const _PaymentGuideQuoteCard({
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final bool expanded;
+  final VoidCallback onTap;
+
+  static const List<Color> _quoteGradient = [AppTheme.twinglMint, AppTheme.twinglPurple];
+  static const double cardRadius = 16;
+
+  static const String _content =
+      'Twingl connects you with neighbors, but we don\'t handle payments directly. '
+      'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!\n\n'
+      'Please agree on a method that works for both of you, such as:\n'
+      '📱 Venmo / Zelle / PayPal\n'
+      '💵 Cash\n'
+      '☕️ Coffee or Meal (for casual sessions)\n\n'
+      'Note: For safety, we recommend paying after meeting in person.\n\n'
+      '💡 Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(cardRadius),
+        boxShadow: [
+          BoxShadow(
+            color: _quoteGradient.first.withAlpha(40),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _quoteGradient,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'How do I pay for lessons?',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withAlpha(250),
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: Colors.white.withAlpha(250),
+                      size: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: expanded
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Text(
+                        _content,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withAlpha(250),
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
     );
   }

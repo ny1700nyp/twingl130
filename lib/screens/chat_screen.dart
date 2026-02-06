@@ -44,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
   int? _firstUnreadMessageIndex;
   /// Total filtered message count when first unread was found (for proportional scroll).
   int? _filteredMessageCount;
+  bool _paymentNoticeExpanded = false;
   bool _isLoadingMore = false;
   bool _hasNoMoreOlder = false;
   /// 초기 스크롤 적용 전까지 메시지 목록 숨김 (잘못된 위치 노출 방지)
@@ -314,6 +315,85 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isSystem(Map<String, dynamic> m) => (m['type'] as String?) == 'system';
+
+  Widget _buildPaymentNotice() {
+    const quoteGradient = [AppTheme.twinglMint, AppTheme.twinglPurple];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shadowColor: quoteGradient.first.withAlpha(40),
+        child: InkWell(
+          onTap: () => setState(() => _paymentNoticeExpanded = !_paymentNoticeExpanded),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: quoteGradient,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: quoteGradient.first.withAlpha(40),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'How do I pay for lessons?',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withAlpha(250),
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        _paymentNoticeExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: Colors.white.withAlpha(250),
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_paymentNoticeExpanded)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Text(
+                      'Twingl connects you with neighbors, but we don\'t handle payments directly. '
+                      'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!\n\n'
+                      'Please agree on a method that works for both of you, such as:\n'
+                      '📱 Venmo / Zelle / PayPal\n'
+                      '💵 Cash\n'
+                      '☕️ Coffee or Meal (for casual sessions)\n\n'
+                      'Note: For safety, we recommend paying after meeting in person.\n\n'
+                      '💡 Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withAlpha(250),
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildUnreadDivider() {
     return Padding(
@@ -1011,6 +1091,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (chatEnabled) _buildPaymentNotice(),
             Expanded(
               child: ValueListenableBuilder<List<Map<String, dynamic>>?>(
                 valueListenable: SupabaseService.chatMessagesCacheForConversation(widget.conversationId),
