@@ -1,4 +1,4 @@
-# Lesson Schedule Proposal & Add to Calendar
+# Scheduling & Add to Calendar
 
 ## Dependencies
 

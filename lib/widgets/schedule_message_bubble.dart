@@ -8,6 +8,8 @@ import '../theme/app_theme.dart';
 class ScheduleMessageBubble extends StatelessWidget {
   final Map<String, dynamic> metadata;
   final String? senderDisplayName;
+  /// Name of the other party in the chat (for calendar event title). Used for both sender and receiver.
+  final String? otherPartyNameForCalendar;
   final bool isMe;
   final String? timestamp;
 
@@ -15,6 +17,7 @@ class ScheduleMessageBubble extends StatelessWidget {
     super.key,
     required this.metadata,
     this.senderDisplayName,
+    this.otherPartyNameForCalendar,
     required this.isMe,
     this.timestamp,
   });
@@ -52,8 +55,9 @@ class ScheduleMessageBubble extends StatelessWidget {
     // Use local time for the calendar event
     final localDt = dt.isUtc ? dt.toLocal() : dt;
     final endDate = localDt.add(Duration(minutes: _durationMinutes));
-    final title = senderDisplayName != null && senderDisplayName!.isNotEmpty
-        ? 'Twingl lesson $senderDisplayName'
+    final name = otherPartyNameForCalendar?.trim();
+    final title = name != null && name.isNotEmpty
+        ? 'Twingl lesson $name'
         : 'Twingl lesson';
 
     final event = Event(
@@ -85,76 +89,37 @@ class ScheduleMessageBubble extends StatelessWidget {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: const BorderSide(color: AppTheme.primaryGreen, width: 1.5),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.calendar_month, color: AppTheme.primaryGreen, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'Scheduler',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryGreen,
-                  ),
+      child: InkWell(
+        onTap: () => _addToCalendar(context),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Add to ',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.primaryGreen,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 18, color: Colors.grey.shade700),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _formattedDateTime,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+              ),
+              Icon(Icons.calendar_month, color: AppTheme.primaryGreen, size: 20),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _formattedDateTime,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
-            if (_location.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.place, size: 18, color: Colors.grey.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _location,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
               ),
             ],
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _addToCalendar(context),
-                icon: const Icon(Icons.add_circle_outline, size: 20),
-                label: const Text('Add to Calendar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

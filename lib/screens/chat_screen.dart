@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,23 +35,20 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _inputFocusNode = FocusNode();
-  final _scrollController = ScrollController();
-  final _firstUnreadKey = GlobalKey();
+  late final AutoScrollController _scrollController = AutoScrollController();
 
   Map<String, dynamic>? _conversation;
   bool _isSending = false;
-  /// ID of the oldest unread message from the other person (before marking read).
+  /// ID of the first unread message from the other person (before marking read).
   String? _firstUnreadMessageId;
-  /// Index in filtered messages list for scroll positioning (ListView.builder builds lazily).
+  /// Index in filtered list (oldest-first order) for first unread message.
   int? _firstUnreadMessageIndex;
-  /// Total filtered message count when first unread was found (for proportional scroll).
-  int? _filteredMessageCount;
   bool _paymentNoticeExpanded = false;
   bool _isLoadingMore = false;
   bool _hasNoMoreOlder = false;
-  /// 초기 스크롤 적용 전까지 메시지 목록 숨김 (잘못된 위치 노출 방지)
   bool _initialScrollApplied = false;
 
+  DateTime? _lastLoadMoreCheck;
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _conversationChannel;
 
@@ -58,7 +56,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     SupabaseService.currentlyViewingConversationId = widget.conversationId;
-    _scrollController.addListener(_onScroll);
     _loadConversationAndMessages();
     _subscribeToMessagesRealtime();
     _subscribeToConversationRealtime();
@@ -66,7 +63,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     if (SupabaseService.currentlyViewingConversationId == widget.conversationId) {
       SupabaseService.currentlyViewingConversationId = null;
     }
@@ -121,15 +117,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     if (kDebugMode) {
       debugPrint('[chat] _loadConversationAndMessages: filteredCount=${filtered.length} '
-          'firstUnreadId=$firstUnreadId firstUnreadIndex=$firstUnreadIndex '
-          'hasUnread=${firstUnreadId != null}');
+          'firstUnreadId=$firstUnreadId firstUnreadIndex=$firstUnreadIndex hasUnread=${firstUnreadId != null}');
     }
 
     setState(() {
       _conversation = conv;
       _firstUnreadMessageId = firstUnreadId;
       _firstUnreadMessageIndex = firstUnreadIndex;
-      _filteredMessageCount = filtered.length;
     });
 
     // Mark read
@@ -177,7 +171,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (decoded is Map) kind = (decoded['kind'] as String?)?.toString();
               }
               if (kind == 'request_accepted' && _conversationStatus() != 'accepted') {
-                if (kDebugMode) debugPrint('[chat] got request_accepted msg → refresh conversation');
+                if (kDebugMode) debugPrint('[chat] got request_accepted msg â†’ refresh conversation');
                 final conv = await SupabaseService.getConversation(widget.conversationId);
                 if (mounted && conv != null) setState(() => _conversation = conv);
               }
@@ -230,8 +224,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!_scrollController.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
+      // reverse: true → index 0 is bottom (newest)
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 120,
+        0,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
@@ -239,117 +234,54 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   static const double _loadMoreThreshold = 150;
-
-  void _onScroll() {
-    if (_isLoadingMore || _hasNoMoreOlder) return;
-    if (!_scrollController.hasClients) return;
-    final pos = _scrollController.position;
-    if (pos.pixels <= _loadMoreThreshold) {
-      _loadOlderMessages();
-    }
-  }
+  static const int _loadOlderPageSize = 100;
 
   Future<void> _loadOlderMessages() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null || _isLoadingMore || _hasNoMoreOlder) return;
 
     setState(() => _isLoadingMore = true);
-    final oldOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final isUnreadMode = _firstUnreadMessageIndex != null;
 
     try {
       final count = await SupabaseService.loadOlderChatMessages(
         user.id,
         widget.conversationId,
-        pageSize: 50,
+        pageSize: _loadOlderPageSize,
       );
       if (mounted) {
         setState(() {
           _isLoadingMore = false;
-          if (count < 50) _hasNoMoreOlder = true;
+          if (count < _loadOlderPageSize) _hasNoMoreOlder = true;
+          if (isUnreadMode && _firstUnreadMessageIndex != null && count > 0) {
+            _firstUnreadMessageIndex = _firstUnreadMessageIndex! + count;
+          }
         });
-        if (count > 0 && _scrollController.hasClients) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!_scrollController.hasClients) return;
-            final newOffset = oldOffset + count * _estimatedItemHeight;
-            _scrollController.jumpTo(
-              newOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-            );
-          });
-        }
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
-  static const double _estimatedItemHeight = 72.0;
-
   void _scrollToInitialPosition() {
     if (kDebugMode) {
-      debugPrint('[chat] _scrollToInitialPosition: hasClients=${_scrollController.hasClients} '
-          'firstUnreadId=$_firstUnreadMessageId firstUnreadIndex=$_firstUnreadMessageIndex '
-          'filteredCount=$_filteredMessageCount');
+      debugPrint('[chat] _scrollToInitialPosition: firstUnreadId=$_firstUnreadMessageId '
+          'firstUnreadIndex=$_firstUnreadMessageIndex');
     }
-    if (!_scrollController.hasClients) {
-      if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition: no clients, scheduling retry');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollController.hasClients) _scrollToInitialPosition();
-        else if (mounted && !_scrollController.hasClients) {
-          if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition: still no clients, showing content anyway');
-          setState(() => _initialScrollApplied = true);
-        }
-      });
-      return;
-    }
+    setState(() => _initialScrollApplied = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (!_scrollController.hasClients) return;
-      final pos = _scrollController.position;
-      if (kDebugMode) {
-        debugPrint('[chat] _scrollToInitialPosition frame: maxScrollExtent=${pos.maxScrollExtent} '
-            'pixels=${pos.pixels} viewportDimension=${pos.viewportDimension}');
-      }
-      if (_firstUnreadMessageId != null && _firstUnreadMessageIndex != null) {
-        // ListView.builder builds lazily; first jump to approximate position so the item gets built.
-        final approxOffset = _firstUnreadMessageIndex! * _estimatedItemHeight;
-        final totalCount = _filteredMessageCount ?? 200;
-        final targetOffset = approxOffset <= pos.maxScrollExtent
-            ? approxOffset.clamp(0.0, pos.maxScrollExtent)
-            : (_firstUnreadMessageIndex! / totalCount) * pos.maxScrollExtent;
-        final clamped = targetOffset.clamp(0.0, pos.maxScrollExtent);
-        if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition unread branch: approxOffset=$approxOffset '
-            'targetOffset=$targetOffset clamped=$clamped totalCount=$totalCount');
-        _scrollController.jumpTo(clamped);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          final hasContext = _firstUnreadKey.currentContext != null;
-          if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition ensureVisible: hasContext=$hasContext');
-          if (hasContext) {
-            Scrollable.ensureVisible(
-              _firstUnreadKey.currentContext!,
-              alignment: 0.0,
-              duration: Duration.zero,
-              curve: Curves.linear,
-            );
-          }
-          if (mounted) setState(() => _initialScrollApplied = true);
-        });
-      } else {
-        final toEnd = pos.maxScrollExtent + 120;
-        if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition all-read branch: jumpTo=$toEnd maxScrollExtent=${pos.maxScrollExtent}');
-        _scrollController.jumpTo(toEnd);
-        if (mounted) setState(() => _initialScrollApplied = true);
-        // ListView.builder is lazy; maxScrollExtent can be 0 on first frame. Retry scroll to end after layout.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_scrollController.hasClients) return;
-          final p = _scrollController.position;
-          if (p.maxScrollExtent > 0) {
-            final toBottom = p.maxScrollExtent + 120;
-            if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition all-read retry: maxScrollExtent=${p.maxScrollExtent} jumpTo=$toBottom');
-            _scrollController.jumpTo(toBottom);
-          }
-        });
-      }
+      if (!mounted || !_scrollController.hasClients) return;
+      final raw = SupabaseService.chatMessagesCacheForConversation(widget.conversationId).value ?? [];
+      final filtered = raw.where((m) => !_shouldHideSystemMessage(m)).toList();
+      final targetIndex = (_firstUnreadMessageId != null && _firstUnreadMessageIndex != null)
+          ? (filtered.length - 1 - _firstUnreadMessageIndex!)
+          : 0;
+      if (kDebugMode) debugPrint('[chat] _scrollToInitialPosition: targetIndex=$targetIndex (reverse list)');
+      _scrollController.scrollToIndex(
+        targetIndex,
+        preferPosition: AutoScrollPosition.middle,
+        duration: const Duration(milliseconds: 300),
+      );
     });
   }
 
@@ -414,11 +346,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       'Twingl connects you with neighbors, but we don\'t handle payments directly. '
                       'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!\n\n'
                       'Please agree on a method that works for both of you, such as:\n'
-                      '📱 Venmo / Zelle / PayPal\n'
-                      '💵 Cash\n'
-                      '☕️ Coffee or Meal (for casual sessions)\n\n'
+                      'ðŸ“± Venmo / Zelle / PayPal\n'
+                      'ðŸ’µ Cash\n'
+                      'â˜•ï¸ Coffee or Meal (for casual sessions)\n\n'
                       'Note: For safety, we recommend paying after meeting in person.\n\n'
-                      '💡 Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
+                      'ðŸ’¡ Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withAlpha(250),
                         height: 1.4,
@@ -499,7 +431,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'durationMinutes': durationMinutes,
     };
 
-    String displayDate = '—';
+    String displayDate = 'â€”';
     if (lessonDate.isNotEmpty) {
       try {
         displayDate = DateFormat('MMM d (EEE), h:mm a')
@@ -509,7 +441,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
     final messageText =
-        'Lesson proposal: $displayDate${location.isNotEmpty ? ' at $location' : ''}';
+        'Scheduling: $displayDate${location.isNotEmpty ? ' at $location' : ''}';
 
     final optimistic = <String, dynamic>{
       'id': 'local-${DateTime.now().microsecondsSinceEpoch}',
@@ -784,13 +716,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }) {
     if (curr == null) return null;
     if (prev != null && !_isSameDay(prev, curr)) {
-      // Date changed since previous message → show date.
+      // Date changed since previous message â†’ show date.
       return DateFormat('yyyy-MM-dd').format(curr);
     }
-    // Same day → show time, unless within 2 minutes of previous message.
+    // Same day: show time only if 1+ minute since previous message
     if (prev != null) {
-      final diff = curr.difference(prev).inSeconds.abs();
-      if (diff < 120) return null; // < 2 minutes → show nothing
+      final diffSec = curr.difference(prev).inSeconds.abs();
+      if (diffSec < 60) return null;
     }
     return DateFormat('HH:mm').format(curr);
   }
@@ -821,10 +753,11 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 227),
+            constraints: const BoxConstraints(maxWidth: 320),
             child: ScheduleMessageBubble(
               metadata: metaMap ?? const {},
               senderDisplayName: isMe ? null : (widget.otherProfile?['name'] as String?),
+              otherPartyNameForCalendar: widget.otherProfile?['name'] as String?,
               isMe: isMe,
               timestamp: _timestampLabel(
                 prev: prevMessage == null ? null : _messageCreatedAtLocal(prevMessage),
@@ -986,7 +919,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (otherUserId.isEmpty) return;
 
     if (!mounted) return;
-    // 시트 드래그 시 재빌드되어도 로딩이 다시 뜨지 않도록, Future를 한 번만 생성
+    // ì‹œíŠ¸ ë“œëž˜ê·¸ ì‹œ ìž¬ë¹Œë“œë˜ì–´ë„ ë¡œë”©ì´ ë‹¤ì‹œ ëœ¨ì§€ ì•Šë„ë¡, Futureë¥¼ í•œ ë²ˆë§Œ ìƒì„±
     final profileFuture = SupabaseService.getPublicProfile(otherUserId);
     await showModalBottomSheet<void>(
       context: context,
@@ -996,7 +929,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final media = MediaQuery.of(ctx);
         final h = media.size.height;
         final topPadding = media.padding.top;
-        // 시트 상단이 인디케이터/노치 아래에 오도록 높이 제한 (슬라이드 다운으로 닫기 가능)
+        // ì‹œíŠ¸ ìƒë‹¨ì´ ì¸ë””ì¼€ì´í„°/ë…¸ì¹˜ ì•„ëž˜ì— ì˜¤ë„ë¡ ë†’ì´ ì œí•œ (ìŠ¬ë¼ì´ë“œ ë‹¤ìš´ìœ¼ë¡œ ë‹«ê¸° ê°€ëŠ¥)
         final sheetHeight = (h - topPadding - 24).clamp(400.0, h * 0.88);
         final surface = Theme.of(ctx).colorScheme.surface;
         return Padding(
@@ -1092,7 +1025,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   if (subParts.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      subParts.join('  •  '),
+                                      subParts.join('  â€¢  '),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
@@ -1252,14 +1185,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final messages = value.where((m) => !_shouldHideSystemMessage(m)).toList();
+                  // Cache is [oldest...newest]; reverse for ListView reverse: true → [newest...oldest]
+                  final filtered = value.where((m) => !_shouldHideSystemMessage(m)).toList();
+                  final messages = List<Map<String, dynamic>>.from(filtered.reversed);
                   final showContent = _initialScrollApplied;
                   final showTopLoader = _isLoadingMore;
-                  final itemCount = messages.length + (showTopLoader ? 1 : 0);
+                  final hasUnread = _firstUnreadMessageIndex != null && _firstUnreadMessageId != null;
+                  final firstUnreadIndexReversed = hasUnread
+                      ? (messages.length - 1 - _firstUnreadMessageIndex!)
+                      : null;
+                  final itemCount = messages.length + (hasUnread ? 1 : 0) + (showTopLoader ? 1 : 0);
                   if (kDebugMode) {
                     debugPrint('[chat] ListView build: messageCount=${messages.length} '
-                        'showContent=$showContent itemCount=$itemCount '
-                        'firstUnreadId=$_firstUnreadMessageId');
+                        'showContent=$showContent hasUnread=$hasUnread itemCount=$itemCount '
+                        'firstUnreadIndexReversed=$firstUnreadIndexReversed');
                   }
 
                   return Stack(
@@ -1270,44 +1209,54 @@ class _ChatScreenState extends State<ChatScreen> {
                         opacity: showContent ? 1 : 0,
                         child: IgnorePointer(
                           ignoring: !showContent,
-                          child: ListView.builder(
-                    controller: _scrollController,
-                    itemCount: itemCount,
-                    itemBuilder: (_, i) {
-                      if (showTopLoader && i == 0) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Center(child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )),
-                        );
-                      }
-                      final msgIndex = showTopLoader ? i - 1 : i;
-                      final m = messages[msgIndex];
-                      final isFirstUnread = _firstUnreadMessageId != null &&
-                          (m['id']?.toString() == _firstUnreadMessageId);
-                      final bubble = _buildMessageBubble(
-                        m,
-                        prevMessage: msgIndex > 0 ? messages[msgIndex - 1] : null,
-                      );
-                      if (isFirstUnread) {
-                        return Column(
-                          key: _firstUnreadKey,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildUnreadDivider(),
-                            bubble,
-                          ],
-                        );
-                      }
-                      return bubble;
-                    },
-                  ),
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (ScrollNotification n) {
+                              if (n is! ScrollUpdateNotification) return false;
+                              final pos = n.metrics;
+                              if (pos.pixels < pos.maxScrollExtent - _loadMoreThreshold) return false;
+                              final now = DateTime.now();
+                              if (_lastLoadMoreCheck != null && now.difference(_lastLoadMoreCheck!).inMilliseconds < 400) return false;
+                              _lastLoadMoreCheck = now;
+                              _loadOlderMessages();
+                              return false;
+                            },
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              reverse: true,
+                              cacheExtent: 600,
+                              itemCount: itemCount,
+                              itemBuilder: (_, i) {
+                              Widget child;
+                              if (showTopLoader && i == itemCount - 1) {
+                                child = const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Center(child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )),
+                                );
+                              } else if (hasUnread && firstUnreadIndexReversed != null && i == firstUnreadIndexReversed) {
+                                child = _buildUnreadDivider();
+                              } else {
+                                final msgIndex = (hasUnread && firstUnreadIndexReversed != null && i > firstUnreadIndexReversed)
+                                    ? i - 1
+                                    : i;
+                                final m = messages[msgIndex];
+                                final prev = msgIndex + 1 < messages.length ? messages[msgIndex + 1] : null;
+                                child = _buildMessageBubble(m, prevMessage: prev);
+                              }
+                              return AutoScrollTag(
+                                key: ValueKey(i),
+                                controller: _scrollController,
+                                index: i,
+                                child: child,
+                              );
+                            },
+                            ),
                           ),
                         ),
+                      ),
                     ],
                   );
                 },
@@ -1336,7 +1285,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         child: Icon(
                           Icons.calendar_month,
-                          color: (chatEnabled && !_isSending)
+                          color: chatEnabled
                               ? Colors.white.withAlpha(250)
                               : Colors.white.withAlpha(120),
                           size: 24,
@@ -1354,18 +1303,40 @@ class _ChatScreenState extends State<ChatScreen> {
                       enabled: chatEnabled,
                       decoration: InputDecoration(
                         hintText: showPending
-                            ? 'Pending… (wait for accept)'
+                            ? 'Pending... (wait for accept)'
                             : showDeclined
                                 ? 'Declined'
-                                : 'Message…',
+                                : 'Message...',
                         border: const OutlineInputBorder(),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: (!chatEnabled || _isSending) ? null : _sendMessage,
-                    icon: const Icon(Icons.send),
+                  Material(
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: (chatEnabled && !_isSending) ? _sendMessage : null,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [AppTheme.primaryGreen, AppTheme.secondaryGold],
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.send,
+                          color: (chatEnabled && !_isSending)
+                              ? Colors.white.withAlpha(250)
+                              : Colors.white.withAlpha(120),
+                          size: 24,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1377,7 +1348,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// Stateful content for the Propose Lesson bottom sheet.
+/// Stateful content for the Scheduling bottom sheet.
 /// Owns the TextEditingController so it is disposed when the sheet is closed.
 class _ProposeLessonSheetContent extends StatefulWidget {
   final void Function(Map<String, dynamic> data) onSend;
@@ -1406,6 +1377,45 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
     super.dispose();
   }
 
+  Widget _buildEditableRow({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5)),
+    );
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+      borderRadius: border.borderRadius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: border.borderRadius,
+        child: InputDecorator(
+          isFocused: false,
+          decoration: InputDecoration(
+            border: border,
+            enabledBorder: border,
+            focusedBorder: border.copyWith(
+              borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            prefixIcon: Icon(icon, size: 22, color: theme.colorScheme.primary),
+            suffixIcon: Icon(Icons.chevron_right, size: 22, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7)),
+            suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 24),
+          ),
+          child: Text(
+            label,
+            style: theme.textTheme.bodyLarge,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1421,16 +1431,14 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
           crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Propose Lesson',
+            'Scheduling',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
-          ListTile(
-            title: Text(
-              DateFormat('EEEE, MMM d, y').format(_selectedDate),
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            trailing: const Icon(Icons.calendar_today),
+          _buildEditableRow(
+            context: context,
+            icon: Icons.calendar_today,
+            label: DateFormat('EEEE, MMM d, y').format(_selectedDate),
             onTap: () async {
               final picked = await showDatePicker(
                 context: context,
@@ -1444,12 +1452,10 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
             },
           ),
           const SizedBox(height: 8),
-          ListTile(
-            title: Text(
-              _selectedTime.format(context),
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            trailing: const Icon(Icons.access_time),
+          _buildEditableRow(
+            context: context,
+            icon: Icons.access_time,
+            label: _selectedTime.format(context),
             onTap: () async {
               final picked = await showTimePicker(
                 context: context,

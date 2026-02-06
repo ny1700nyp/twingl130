@@ -55,6 +55,7 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^17.2.2
   shared_preferences: ^2.5.4
+  scroll_to_index: ^3.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
