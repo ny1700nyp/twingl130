@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show ValueNotifier, debugPrint;
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -175,20 +176,61 @@ class SupabaseService {
     _avatarRehydrateAttemptedUserIds.clear();
   }
 
+  /// Supabase project URL (must match main.dart Supabase.initialize url).
+  static const String _supabaseUrl = 'https://oibboowecbxvjmookwtd.supabase.co';
+
+  /// Reset current user data for re-onboarding: clear conversations (and messages), liked list,
+  /// blocked list, and profile so that on next login the user goes through onboarding again.
+  /// Does not delete the Auth account.
+  static Future<void> resetUserDataForReOnboarding() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not signed in');
+
+    await supabase
+        .from('conversations')
+        .delete()
+        .or('trainer_id.eq.$userId,trainee_id.eq.$userId');
+    await supabase.from('favorite_tab_assignments').delete().eq('user_id', userId);
+    await supabase.from('blocked_users').delete().eq('user_id', userId);
+    await supabase.from('profiles').delete().eq('user_id', userId);
+  }
+
+  /// Clear disk cache for a user (profile, favorites, location, city, chat conversations).
+  /// Call before sign-out when resetting for re-onboarding so next login doesn't use stale cache.
+  static Future<void> clearDiskCacheForUser(String userId) async {
+    await PersistentCache.remove(_kProfile(userId));
+    await PersistentCache.remove(_kFavorites(userId));
+    await PersistentCache.remove(_kLocation(userId));
+    await PersistentCache.remove(_kCity(userId));
+    await PersistentCache.remove(_kChatConversations(userId));
+  }
+
   /// Delete the current user's account (Supabase Auth). Calls Edge Function delete-user with
   /// the user's JWT; the function uses service role to delete the user. Works for email and
   /// Google (and other OAuth) sign-in. Requires the delete-user Edge Function to be deployed.
+  /// Uses raw HTTP so only Bearer token is sent (avoids client overriding Authorization).
   static Future<void> deleteCurrentUserAccount() async {
+    await supabase.auth.refreshSession();
     final session = supabase.auth.currentSession;
     if (session == null) throw Exception('Not signed in');
     final token = session.accessToken;
-    final response = await supabase.functions.invoke(
-      'delete-user',
-      headers: {'Authorization': 'Bearer $token'},
+    final uri = Uri.parse('$_supabaseUrl/functions/v1/delete-user');
+    final response = await http.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
     );
-    if (response.status != 200) {
-      final msg = response.data is Map ? (response.data['error'] ?? response.data['msg'] ?? response.data) : response.data;
-      throw Exception(msg ?? 'Account deletion failed (${response.status})');
+    if (response.statusCode != 200) {
+      String? msg;
+      try {
+        final data = jsonDecode(response.body) as Map<dynamic, dynamic>?;
+        if (data != null) {
+          msg = (data['error'] ?? data['msg'])?.toString();
+        }
+      } catch (_) {}
+      throw Exception(msg ?? 'Account deletion failed (${response.statusCode})');
     }
   }
 
@@ -1428,6 +1470,8 @@ class SupabaseService {
         final dist = distanceMap[uid];
         if (dist != null) p['distance_meters'] = dist;
       }
+      final blockedIds = await getBlockedUserIds(currentUserId);
+      profiles.removeWhere((p) => blockedIds.contains(p['user_id']?.toString()));
       profiles.sort((a, b) {
         final orderA = ids.indexOf(a['user_id']?.toString() ?? '');
         final orderB = ids.indexOf(b['user_id']?.toString() ?? '');
@@ -1440,7 +1484,7 @@ class SupabaseService {
         return da.compareTo(db);
       });
 
-      debugPrint('[$tag] RPC matched=${ids.length} profilesFetched=${profiles.length}');
+      debugPrint('[$tag] RPC matched=${ids.length} profilesFetched=${profiles.length} (after excluding ${blockedIds.length} blocked)');
       return profiles;
     } catch (e) {
       print('$rpcName: $e');
@@ -1504,6 +1548,8 @@ class SupabaseService {
         final uid = p['user_id']?.toString() ?? '';
         p['match_count'] = matchCountMap[uid] ?? 0;
       }
+      final blockedIds = await getBlockedUserIds(currentUserId);
+      profiles.removeWhere((p) => blockedIds.contains(p['user_id']?.toString()));
       profiles.sort((a, b) {
         final orderA = ids.indexOf(a['user_id']?.toString() ?? '');
         final orderB = ids.indexOf(b['user_id']?.toString() ?? '');
@@ -1511,7 +1557,7 @@ class SupabaseService {
         return (b['match_count'] as int? ?? 0).compareTo(a['match_count'] as int? ?? 0);
       });
 
-      debugPrint('[GlobalTalentMatching] RPC matched=${ids.length} profilesFetched=${profiles.length}');
+      debugPrint('[GlobalTalentMatching] RPC matched=${ids.length} profilesFetched=${profiles.length} (after excluding blocked)');
       return profiles;
     } catch (e) {
       print('Failed to get talent matching cards: $e');
@@ -2068,6 +2114,37 @@ class SupabaseService {
     await removeFavoriteTabAssignment(blockerUserId, blockedUserId, bumpVersion: bumpVersion);
   }
 
+  /// Unblock a user: they can message you again and appear in your chat list.
+  static Future<void> unblockUser(String userId, String blockedUserId) async {
+    try {
+      await supabase
+          .from('blocked_users')
+          .delete()
+          .eq('user_id', userId)
+          .eq('blocked_user_id', blockedUserId);
+    } catch (_) {}
+  }
+
+  /// Blocked users with profile info (for Unblock User list).
+  static Future<List<Map<String, dynamic>>> getBlockedProfiles(String userId) async {
+    try {
+      final ids = await getBlockedUserIds(userId);
+      if (ids.isEmpty) return [];
+      final out = <Map<String, dynamic>>[];
+      for (final id in ids) {
+        final p = await getPublicProfile(id);
+        if (p != null) {
+          final m = Map<String, dynamic>.from(p);
+          m['user_id'] = id;
+          out.add(m);
+        }
+      }
+      return out;
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Throttled background refresh: only updates caches if DB changed.
   static Future<void> refreshBootstrapCachesIfChanged(String userId) async {
     // throttle: 5s
@@ -2224,20 +2301,20 @@ class SupabaseService {
         final cards = response
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
-        
+        final blockedIds = await getBlockedUserIds(currentUserId);
+        final filtered = cards.where((c) => !blockedIds.contains(c['user_id']?.toString())).toList();
         // 거리 순 정렬 확인 로그
-        if (cards.isNotEmpty) {
+        if (filtered.isNotEmpty) {
           print('========================================');
           print('거리 순 정렬 확인:');
-          for (int i = 0; i < cards.length && i < 5; i++) {
-            final distance = (cards[i]['distance_meters'] as num?)?.toDouble();
-            final name = cards[i]['name'] as String? ?? 'Unknown';
+          for (int i = 0; i < filtered.length && i < 5; i++) {
+            final distance = (filtered[i]['distance_meters'] as num?)?.toDouble();
+            final name = filtered[i]['name'] as String? ?? 'Unknown';
             print('  ${i + 1}. $name: ${distance?.toStringAsFixed(1) ?? 'N/A'}m');
           }
           print('========================================');
         }
-        
-        return cards;
+        return filtered;
       }
       
       print('RPC 함수 응답이 List가 아님: ${response.runtimeType}');
@@ -2283,6 +2360,8 @@ class SupabaseService {
         print('스와이프 기록 가져오기 실패: $e');
       }
 
+      final blockedIds = await getBlockedUserIds(currentUserId);
+
       // 반대 타입의 사용자들 가져오기 (tutor ↔ student)
       final targetType = userType == 'tutor' ? 'student' : 'tutor';
 
@@ -2298,7 +2377,7 @@ class SupabaseService {
           .map((e) => Map<String, dynamic>.from(e))
           .where((profile) {
             final userId = profile['user_id'] as String? ?? '';
-            return !swipedUserIds.contains(userId);
+            return !swipedUserIds.contains(userId) && !blockedIds.contains(userId);
           })
           .toList();
     

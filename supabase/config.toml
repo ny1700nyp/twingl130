@@ -1,0 +1,7 @@
+# Supabase project config (used by CLI for local dev and deploy).
+# See: https://supabase.com/docs/guides/cli/config
+
+[functions.delete-user]
+# Skip gateway JWT verification so the request reaches the function.
+# The function validates the Bearer token itself (getUser + JWKS fallback).
+verify_jwt = false

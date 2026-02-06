@@ -1124,8 +1124,8 @@ class ProfileDetailScreen extends StatelessWidget {
                     SizedBox(height: sectionSpacing),
                   ],
                   
-                  // Twiner 전용: I want to learn (goals). Mint = my talent ↔ their goal (I'm Tutor or Twiner).
-                  if (userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
+                  // Twiner 전용: I want to learn (goals). 내 프로필이면 카드에서 이미 표시하므로 여기서는 제외.
+                  if ((!isMyProfile || onEditPressed == null) && userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
                     Text(
                       'I want to learn',
                       style: TextStyle(

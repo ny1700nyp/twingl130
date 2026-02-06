@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import 'about_screen.dart';
 import 'general_settings_screen.dart';
 import 'onboarding_screen.dart';
+import 'user_management_screen.dart';
 
 /// Shows a custom dialog explaining the given identity (student, tutor, twiner).
 void showIdentityDialog(BuildContext context, String type) {
@@ -300,13 +301,13 @@ class _MoreScreenState extends State<MoreScreen> {
                   margin: EdgeInsets.zero,
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: const _AccountCardContent(),
+                  child: _AccountCardContent(user: user),
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Support, Logout
-              _GeneralSettingsSection(user: user),
+              // Support
+              const _GeneralSettingsSection(),
             ],
           );
         },
@@ -1314,9 +1315,65 @@ class _BadgeGuideCardContent extends StatelessWidget {
   }
 }
 
-/// Account content: Verification, Language.
+/// Account content: Edit My Profile, Delete/Block/Unblock User, Leave Twingl, Log out.
 class _AccountCardContent extends StatelessWidget {
-  const _AccountCardContent();
+  const _AccountCardContent({this.user});
+
+  final User? user;
+
+  Future<void> _onDeleteMeFromTwinglTap(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave Twingl'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Your account will stay, but:\n\n'
+            '• Your liked list and blocked list will be cleared.\n'
+            '• Your profile will be removed so you can go through onboarding again when you sign in next time.\n\n'
+            'Are you sure you want to leave Twingl?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    String? errorMessage;
+    try {
+      await SupabaseService.resetUserDataForReOnboarding();
+      if (!context.mounted) return;
+      await SupabaseService.clearDiskCacheForUser(userId);
+      SupabaseService.clearInMemoryCaches();
+    } catch (e) {
+      errorMessage = e.toString();
+    }
+    if (errorMessage != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Leave Twingl: $errorMessage'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+    await Supabase.instance.client.auth.signOut();
+    rootNavigator.pushNamedAndRemoveUntil('/login', (_) => false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1326,21 +1383,112 @@ class _AccountCardContent extends StatelessWidget {
         children: [
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.verified_user_outlined),
-            title: const Text('Verification'),
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit My Profile'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final profile = await SupabaseService.getCurrentUserProfile();
+              if (!context.mounted) return;
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => OnboardingScreen(existingProfile: profile),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.person_remove_outlined),
+            title: const Text('Delete User'),
+            subtitle: Text(
+              'Remove users from your Liked list',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+              MaterialPageRoute(
+                builder: (_) => const UserManagementScreen(
+                  mode: UserManagementMode.deleteFromLiked,
+                ),
+              ),
             ),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.language),
-            title: const Text('Language'),
+            leading: const Icon(Icons.block),
+            title: const Text('Block User'),
+            subtitle: Text(
+              'Block users so they cannot send you messages',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+              MaterialPageRoute(
+                builder: (_) => const UserManagementScreen(
+                  mode: UserManagementMode.block,
+                ),
+              ),
             ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.lock_open),
+            title: const Text('Unblock User'),
+            subtitle: Text(
+              'Unblock users so they can message you again',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const UserManagementScreen(
+                  mode: UserManagementMode.unblock,
+                ),
+              ),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_forever_outlined, color: Theme.of(context).colorScheme.error),
+            title: Text(
+              'Leave Twingl',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            subtitle: Text(
+              'Clear liked & blocked lists, re-do onboarding on next login',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error.withOpacity(0.8),
+                  ),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _onDeleteMeFromTwinglTap(context),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.logout),
+            title: Text(
+              'Log out',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            onTap: user == null
+                ? null
+                : () async {
+                    await Supabase.instance.client.auth.signOut();
+                    SupabaseService.clearInMemoryCaches();
+                    if (!context.mounted) return;
+                    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+                  },
           ),
         ],
       ),
@@ -1385,11 +1533,9 @@ class _NotificationsCardContent extends StatelessWidget {
   }
 }
 
-/// General Settings: Support, Logout.
+/// Support: Verification, Language, Help, Terms.
 class _GeneralSettingsSection extends StatelessWidget {
-  const _GeneralSettingsSection({this.user});
-
-  final User? user;
+  const _GeneralSettingsSection();
 
   @override
   Widget build(BuildContext context) {
@@ -1413,6 +1559,22 @@ class _GeneralSettingsSection extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: const Text('Verification'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: const Text('Language'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+                  ),
+                ),
+                ListTile(
                   leading: const Icon(Icons.help_outline),
                   title: const Text('Help'),
                   trailing: const Icon(Icons.chevron_right),
@@ -1425,33 +1587,6 @@ class _GeneralSettingsSection extends StatelessWidget {
                   onTap: () {},
                 ),
               ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: Card(
-            margin: EdgeInsets.zero,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ListTile(
-              leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
-              title: Text(
-                'Log out',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-              onTap: user == null
-                  ? null
-                  : () async {
-                      await Supabase.instance.client.auth.signOut();
-                      SupabaseService.clearInMemoryCaches();
-                      if (!context.mounted) return;
-                      navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
-                    },
             ),
           ),
         ),

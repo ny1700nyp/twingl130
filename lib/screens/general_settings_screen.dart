@@ -19,10 +19,10 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Delete my account'),
+        title: const Text('Leave Twingl'),
         content: const Text(
-          'Are you sure you want to permanently delete your account? '
-          'All your data will be removed and this cannot be undone.',
+          'Your liked list and blocked list will be cleared, and your profile will be removed '
+          'so you can go through onboarding again when you sign in next time. Your account will remain.',
         ),
         actions: [
           TextButton(
@@ -42,19 +42,24 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
     setState(() => _isDeleting = true);
     try {
-      await SupabaseService.deleteCurrentUserAccount();
+      await SupabaseService.resetUserDataForReOnboarding();
+      if (!mounted) return;
+      await SupabaseService.clearDiskCacheForUser(userId);
+      SupabaseService.clearInMemoryCaches();
       if (!mounted) return;
       await Supabase.instance.client.auth.signOut();
-      SupabaseService.clearInMemoryCaches();
       if (!mounted) return;
       navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to delete account: $e'),
+          content: Text('Failed to leave Twingl: $e'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -78,13 +83,13 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Delete my account',
+                'Leave Twingl',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.error,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              subtitle: const Text('Permanently delete your account and all data'),
+              subtitle: const Text('Clear liked & blocked lists, re-do onboarding on next login'),
               enabled: !_isDeleting,
               onTap: _isDeleting ? null : _onDeleteAccountTap,
               trailing: _isDeleting
