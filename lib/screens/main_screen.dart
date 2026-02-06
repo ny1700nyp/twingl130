@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_theme.dart';
-import 'calendar_dashboard.dart';
 import 'chat_dashboard.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
@@ -18,7 +19,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   int _chatResetToken = 0;
-  int _calendarRefreshToken = 0;
 
   @override
   void initState() {
@@ -27,6 +27,32 @@ class _MainScreenState extends State<MainScreen> {
     if (user != null) {
       // Ensure badge is correct even before opening Chat tab.
       SupabaseService.getChatConversationsCached(user.id);
+      // Fetch fresh GPS on every app start (non-blocking).
+      if (!kIsWeb) {
+        Future(() => _fetchLocationOnStart());
+      }
+    }
+  }
+
+  Future<void> _fetchLocationOnStart() async {
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+      final p = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 10),
+      );
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await SupabaseService.setLastKnownLocationForCurrentUser(
+          lat: p.latitude,
+          lon: p.longitude,
+        );
+      }
+    } catch (_) {
+      // ignore; fallback to cached/profile location
     }
   }
 
@@ -81,7 +107,6 @@ class _MainScreenState extends State<MainScreen> {
         children: [
           const HomeScreen(),
           ChatDashboard(resetToken: _chatResetToken),
-          CalendarDashboard(refreshToken: _calendarRefreshToken),
           const MoreScreen(),
         ],
       ),
@@ -101,10 +126,6 @@ class _MainScreenState extends State<MainScreen> {
                 if (idx == 1 && _currentIndex != 1) {
                   _chatResetToken += 1;
                 }
-                // If we are entering Calendar tab from another tab, refresh events.
-                if (idx == 2 && _currentIndex != 2) {
-                  _calendarRefreshToken += 1;
-                }
                 _currentIndex = idx;
               });
             },
@@ -115,10 +136,6 @@ class _MainScreenState extends State<MainScreen> {
               ),
               BottomNavigationBarItem(
                 icon: _chatIconWithBadge(unread),
-                label: '',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.calendar_month_outlined),
                 label: '',
               ),
               const BottomNavigationBarItem(

@@ -15,6 +15,8 @@ import '../widgets/user_stats_widget.dart';
 import 'chat_screen.dart';
 import 'training_history_screen.dart';
 
+const double _kProfileImageSize = 150;
+
 class ProfileDetailScreen extends StatelessWidget {
   final Map<String, dynamic> profile;
   final bool hideAppBar;
@@ -171,11 +173,13 @@ class ProfileDetailScreen extends StatelessWidget {
   }
 
   /// [highlightColor]: when non-null and highlighted, use purple (goal↔talent) or mint (talent↔goal).
+  /// [chipBorderColor]: goal=mint, talent=purple.
   Widget _buildProfileChip(
     BuildContext context,
     String label, {
     bool highlighted = false,
     Color? highlightColor,
+    Color? chipBorderColor,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final bg = highlighted
@@ -184,6 +188,7 @@ class ProfileDetailScreen extends StatelessWidget {
     final textColor = highlighted
         ? (highlightColor != null ? Colors.white : scheme.onPrimary)
         : scheme.onSurface;
+    final borderColor = chipBorderColor ?? bg;
     return Chip(
       label: Text(
         label,
@@ -193,7 +198,7 @@ class ProfileDetailScreen extends StatelessWidget {
         ),
       ),
       backgroundColor: bg,
-      side: BorderSide(color: bg),
+      side: BorderSide(color: borderColor),
     );
   }
 
@@ -214,97 +219,69 @@ class ProfileDetailScreen extends StatelessWidget {
   String _formatDistance(double distanceMeters) => formatDistanceMeters(distanceMeters);
 
   Widget _buildProfileImage(BuildContext context, String? imagePath) {
-    if (imagePath == null || imagePath.isEmpty) {
-      return Container(
-        height: 300,
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Icon(
-          Icons.person,
-          size: 100,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
+    final imageBox = SizedBox(
+      width: _kProfileImageSize,
+      height: _kProfileImageSize,
+      child: ClipRect(
+        child: _buildProfileImageInner(context, imagePath),
+      ),
+    );
+    return Center(child: imageBox);
+  }
+
+  Widget _buildProfileImageInner(BuildContext context, String? imagePath) {
+    final emptyWidget = Container(
+      width: _kProfileImageSize,
+      height: _kProfileImageSize,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(
+        Icons.person,
+        size: 60,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+    if (imagePath == null || imagePath.isEmpty) return emptyWidget;
 
     // base64 data URL인 경우 (cover로 채워서 라운드 클립이 보이도록)
     if (imagePath.startsWith('data:image')) {
       return Image.memory(
         base64Decode(imagePath.split(',')[1]),
         fit: BoxFit.cover,
-        height: 300,
-        width: double.infinity,
+        width: _kProfileImageSize,
+        height: _kProfileImageSize,
         gaplessPlayback: true,
-        errorBuilder: (ctx, error, stackTrace) {
-          return Container(
-            height: 300,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.person,
-              size: 100,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        },
+        errorBuilder: (_, __, ___) => emptyWidget,
       );
     }
-    
+
     // 네트워크 URL인 경우
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return Image.network(
         imagePath,
         fit: BoxFit.cover,
-        height: 300,
-        width: double.infinity,
+        width: _kProfileImageSize,
+        height: _kProfileImageSize,
         gaplessPlayback: true,
-        errorBuilder: (ctx, error, stackTrace) {
-          return Container(
-            height: 300,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.person,
-              size: 100,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          );
-        },
+        errorBuilder: (_, __, ___) => emptyWidget,
       );
     }
-    
+
     // 로컬 파일 경로인 경우 (모바일만)
     if (!kIsWeb) {
       try {
         return Image.file(
           File(imagePath),
           fit: BoxFit.cover,
-          height: 300,
-          width: double.infinity,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              height: 300,
-              color: Colors.grey[300],
-              child: const Icon(Icons.person, size: 100),
-            );
-          },
+          width: _kProfileImageSize,
+          height: _kProfileImageSize,
+          errorBuilder: (_, __, ___) => emptyWidget,
         );
       } catch (e) {
-        return Container(
-          height: 300,
-          color: Colors.grey[300],
-          child: const Icon(Icons.person, size: 100),
-        );
+        return emptyWidget;
       }
     }
-    
-    // 기본값
-    return Container(
-      height: 300,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.person,
-        size: 100,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
+
+    return emptyWidget;
   }
 
   /// Static helper to build Share app bar button for use in AppBar actions.
@@ -433,17 +410,13 @@ class ProfileDetailScreen extends StatelessWidget {
           );
 
     if (photos.isEmpty) {
-      return Container(
-        height: 300,
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      return SizedBox(
+        height: _kProfileImageSize + 24,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
             Center(
-              child: Icon(
-                Icons.person,
-                size: 100,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+              child: _buildProfileImage(context, null),
             ),
             if (topRightWidget != null) topRightWidget,
           ],
@@ -452,24 +425,34 @@ class ProfileDetailScreen extends StatelessWidget {
     }
 
     if (photos.length == 1) {
-      return Stack(
-        children: [
-          _buildProfileImage(context, photos[0]),
-          if (topRightWidget != null) topRightWidget,
-        ],
+      return SizedBox(
+        height: _kProfileImageSize + 24,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Center(child: _buildProfileImage(context, photos[0])),
+            if (topRightWidget != null) topRightWidget,
+          ],
+        ),
       );
     }
 
     final sliderKey = ValueKey<String>(photos.isEmpty ? '' : photos.first);
-    return Stack(
-      children: [
-        _PhotoSliderWidget(
-          key: sliderKey,
-          photos: photos,
-          buildImage: (imagePath) => _buildProfileImage(context, imagePath),
-        ),
-        if (topRightWidget != null) topRightWidget,
-      ],
+    return SizedBox(
+      height: _kProfileImageSize + 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Center(
+            child: _PhotoSliderWidget(
+              key: sliderKey,
+              photos: photos,
+              buildImage: (imagePath) => _buildProfileImage(context, imagePath),
+            ),
+          ),
+          if (topRightWidget != null) topRightWidget,
+        ],
+      ),
     );
   }
 
@@ -1001,7 +984,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: talents.map((t) => _buildProfileChip(context, t.toString(), highlighted: false)).toList(),
+                                children: talents.map((t) => _buildProfileChip(context, t.toString(), highlighted: false, chipBorderColor: AppTheme.twinglPurple)).toList(),
                               ),
                               SizedBox(height: sectionSpacing),
                             ],
@@ -1012,7 +995,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: twinerGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false)).toList(),
+                                children: twinerGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
                               ),
                               SizedBox(height: sectionSpacing),
                             ],
@@ -1061,7 +1044,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: traineeGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false)).toList(),
+                                children: traineeGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
                               ),
                             ],
                       ],
@@ -1133,6 +1116,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               talentStr,
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglPurple : null,
+                              chipBorderColor: AppTheme.twinglPurple,
                             );
                           })
                           .toList(),
@@ -1164,6 +1148,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               goalStr,
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglMint : null,
+                              chipBorderColor: AppTheme.twinglMint,
                             );
                           })
                           .toList(),
@@ -1243,6 +1228,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               goalStr,
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglMint : null,
+                              chipBorderColor: AppTheme.twinglMint,
                             );
                           })
                           .toList(),
@@ -1515,7 +1501,7 @@ class _PhotoSliderWidgetState extends State<_PhotoSliderWidget> {
     return Stack(
       children: [
         SizedBox(
-          height: 300,
+          height: _kProfileImageSize + 24,
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.photos.length,

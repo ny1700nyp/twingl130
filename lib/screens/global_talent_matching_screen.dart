@@ -521,7 +521,8 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
                 runSpacing: 8,
                 children: shownTalents.map((k) {
                   final isMatch = _myKeywordsNorm.contains(_norm(k));
-                  final bg = isMatch ? AppTheme.twinglGreen : Theme.of(context).colorScheme.surfaceContainerHighest;
+                  const borderColor = AppTheme.twinglPurple;
+                  final bg = isMatch ? borderColor : Theme.of(context).colorScheme.surfaceContainerHighest;
                   final fg = isMatch ? Colors.white : Theme.of(context).colorScheme.onSurface;
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -529,7 +530,7 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
                       color: bg,
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: isMatch ? Colors.transparent : AppTheme.twinglGreen,
+                        color: borderColor,
                         width: 1.2,
                       ),
                     ),
