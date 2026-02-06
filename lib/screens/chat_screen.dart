@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -342,27 +342,83 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (_paymentNoticeExpanded)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Text(
-                      'Twingl connects you with neighbors, but we don\'t handle payments directly. '
-                      'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!\n\n'
-                      'Please agree on a method that works for both of you, such as:\n'
-                      'ðŸ“± Venmo / Zelle / PayPal\n'
-                      'ðŸ’µ Cash\n'
-                      'â˜•ï¸ Coffee or Meal (for casual sessions)\n\n'
-                      'Note: For safety, we recommend paying after meeting in person.\n\n'
-                      'ðŸ’¡ Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withAlpha(250),
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    child: _buildPaymentGuideBody(context),
                   ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  static const double _paymentGuideIconSize = 18.0;
+
+  Widget _buildPaymentGuideBody(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Colors.white.withAlpha(250),
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+    );
+    final iconColor = Colors.white.withAlpha(250);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Twingl connects you with neighbors, but we don\'t handle payments directly. '
+          'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!',
+          style: style,
+        ),
+        const SizedBox(height: 12),
+        Text('Please agree on a method that works for both of you, such as:', style: style),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.smartphone, size: _paymentGuideIconSize, color: iconColor),
+            const SizedBox(width: 6),
+            Expanded(child: Text('Venmo / Zelle / PayPal', style: style)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.attach_money, size: _paymentGuideIconSize, color: iconColor),
+            const SizedBox(width: 6),
+            Expanded(child: Text('Cash', style: style)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.coffee, size: _paymentGuideIconSize, color: iconColor),
+            const SizedBox(width: 6),
+            Expanded(child: Text('Coffee or Meal (for casual sessions)', style: style)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Note: For safety, we recommend paying after meeting in person.',
+          style: style,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.lightbulb_outline, size: _paymentGuideIconSize, color: iconColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
+                style: style,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
