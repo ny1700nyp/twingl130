@@ -716,7 +716,6 @@ class ProfileDetailScreen extends StatelessWidget {
     // 모든 프로필(내 프로필·채팅 이름 탭·My Favorite 등) 동일한 컴팩트 레이아웃
     const double sectionTitleFontSize = 16.0;
     const double sectionSpacing = 14.0;
-    const double buttonVerticalPadding = 12.0;
     // Tudent의 "I want to learn"용 goals (DB goals 컬럼)
     final twinerGoals = userType == 'twiner' ? (profile['goals'] as List<dynamic>?) ?? const <dynamic>[] : null;
 
@@ -758,45 +757,50 @@ class ProfileDetailScreen extends StatelessWidget {
                 ),
               ),
 
-            // Request Training 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
+            // Request Training & Chat history (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
             if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showRequestTrainModal(context),
-                    icon: const Icon(Icons.school),
-                    label: const Text('Request Training'),
-                    style: _profilePrimaryActionStyle(verticalPadding: buttonVerticalPadding),
-                  ),
-                ),
-              ),
-            
-            // Chat history 버튼 (로그인 상태에서 다른 Trainer 프로필을 볼 때 표시)
-            if (!hideActionButtons && !isMyProfile && (userType == 'tutor' || userType == 'twiner') && isSignedIn)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final otherUserId = profile['user_id'] as String?;
-                      if (otherUserId != null) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => TrainingHistoryScreen(
-                              otherUserId: otherUserId,
-                              otherProfile: profile,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Chat history'),
-                    style: _profilePrimaryActionStyle(verticalPadding: buttonVerticalPadding),
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showRequestTrainModal(context),
+                        icon: const Icon(Icons.school, size: 18),
+                        label: Text(
+                          'Request Training',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: _profilePrimaryActionStyle(verticalPadding: 8),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final otherUserId = profile['user_id'] as String?;
+                          if (otherUserId != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => TrainingHistoryScreen(
+                                  otherUserId: otherUserId,
+                                  otherProfile: profile,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: Text(
+                          'Chat history',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: _profilePrimaryActionStyle(verticalPadding: 8),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 

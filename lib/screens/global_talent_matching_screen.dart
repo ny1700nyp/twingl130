@@ -430,137 +430,145 @@ class _GlobalTalentMatchingScreenState extends State<GlobalTalentMatchingScreen>
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: SizedBox(
-                  width: 140,
-                  height: 140,
-                  child: imageProvider == null
-                      ? Container(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.person,
-                            size: 54,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                          ),
-                        )
-                      : RepaintBoundary(
-                          child: Image(
-                            image: imageProvider,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            filterQuality: FilterQuality.medium,
-                          ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            height: constraints.maxHeight,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: SizedBox(
+                          width: 140,
+                          height: 140,
+                          child: imageProvider == null
+                              ? Container(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  child: Icon(
+                                    Icons.person,
+                                    size: 54,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                                  ),
+                                )
+                              : RepaintBoundary(
+                                  child: Image(
+                                    image: imageProvider,
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                    filterQuality: FilterQuality.medium,
+                                  ),
+                                ),
                         ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                [
-                  name,
-                  if (ageRangeLabel != null) ageRangeLabel,
-                  if (genderLabel != null) genderLabel,
-                ].join(' • '),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (distanceLabel != null || methodLabel != null)
-              Center(
-                child: Text(
-                  [
-                    if (distanceLabel != null) distanceLabel,
-                    if (methodLabel != null) methodLabel,
-                  ].join('  •  '),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
-                      ),
-                ),
-              ),
-            if (aboutMe.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                aboutMe,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.80),
-                      height: 1.25,
-                    ),
-              ),
-            ],
-            if (shownTalents.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'I can teach',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: shownTalents.map((k) {
-                  final isMatch = _myKeywordsNorm.contains(_norm(k));
-                  const borderColor = AppTheme.twinglPurple;
-                  final bg = isMatch ? borderColor : Theme.of(context).colorScheme.surfaceContainerHighest;
-                  final fg = isMatch ? Colors.white : Theme.of(context).colorScheme.onSurface;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: borderColor,
-                        width: 1.2,
                       ),
                     ),
-                    child: Text(
-                      k,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: fg,
-                            fontWeight: isMatch ? FontWeight.w900 : FontWeight.w700,
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        [
+                          name,
+                          if (ageRangeLabel != null) ageRangeLabel,
+                          if (genderLabel != null) genderLabel,
+                        ].join(' • '),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (distanceLabel != null || methodLabel != null)
+                      Center(
+                        child: Text(
+                          [
+                            if (distanceLabel != null) distanceLabel,
+                            if (methodLabel != null) methodLabel,
+                          ].join('  •  '),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
+                              ),
+                        ),
+                      ),
+                    if (aboutMe.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        aboutMe,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.80),
+                              height: 1.25,
+                            ),
+                      ),
+                    ],
+                    if (shownTalents.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'I can teach',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: shownTalents.map((k) {
+                          final isMatch = _myKeywordsNorm.contains(_norm(k));
+                          const borderColor = AppTheme.twinglPurple;
+                          final bg = isMatch ? borderColor : Theme.of(context).colorScheme.surfaceContainerHighest;
+                          final fg = isMatch ? Colors.white : Theme.of(context).colorScheme.onSurface;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: borderColor,
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Text(
+                              k,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: fg,
+                                    fontWeight: isMatch ? FontWeight.w900 : FontWeight.w700,
+                                  ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Text(
+                      'Tutoring rate',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
                           ),
                     ),
-                  );
-                }).toList(),
+                    const SizedBox(height: 6),
+                    Text(
+                      rateLabel ?? '—',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-            const SizedBox(height: 14),
-            Text(
-              'Tutoring rate',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              rateLabel ?? '—',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
