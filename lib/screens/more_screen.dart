@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_navigation.dart' show navigatorKey;
+import '../services/notification_service.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import 'about_screen.dart';
@@ -245,7 +246,50 @@ class _MoreScreenState extends State<MoreScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Account, Support, Logout
+              // Notifications
+              Text(
+                'Notifications',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: _NotificationsCardContent(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Account
+              Text(
+                'Account',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: const _AccountCardContent(),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Support, Logout
               _GeneralSettingsSection(user: user),
             ],
           );
@@ -1158,7 +1202,78 @@ class _BadgeGuideCardContent extends StatelessWidget {
   }
 }
 
-/// General Settings: Verification, Notifications, Language, Help, Terms, Logout.
+/// Account content: Verification, Language.
+class _AccountCardContent extends StatelessWidget {
+  const _AccountCardContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.verified_user_outlined),
+            title: const Text('Verification'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.language),
+            title: const Text('Language'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Notifications content: Chat messages on/off toggle.
+class _NotificationsCardContent extends StatelessWidget {
+  const _NotificationsCardContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: NotificationService().chatNotificationsEnabled,
+        builder: (context, enabled, _) {
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.chat_bubble_outline),
+            title: const Text('Chat messages'),
+            subtitle: Text(
+              enabled ? 'Get notified when you receive new messages' : 'Notifications off',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+            ),
+            trailing: Switch(
+              value: enabled,
+              onChanged: (v) {
+                NotificationService().setChatNotificationsEnabled(v);
+              },
+            ),
+            onTap: () {
+              NotificationService().setChatNotificationsEnabled(!enabled);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// General Settings: Support, Logout.
 class _GeneralSettingsSection extends StatelessWidget {
   const _GeneralSettingsSection({this.user});
 
@@ -1169,51 +1284,6 @@ class _GeneralSettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Account',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: Card(
-            margin: EdgeInsets.zero,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.verified_user_outlined),
-                  title: const Text('Verification'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.notifications_outlined),
-                  title: const Text('Notifications'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.language),
-                  title: const Text('Language'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const GeneralSettingsScreen()),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
         Text(
           'Support',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(

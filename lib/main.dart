@@ -1,4 +1,5 @@
 import 'package:app_links/app_links.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_navigation.dart' show navigatorKey;
 import 'screens/login_screen.dart';
+import 'services/fcm_service.dart';
 import 'screens/main_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/public_profile_screen.dart';
@@ -21,6 +23,16 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
   ]);
+
+  // Firebase (for FCM push notifications) - needs google-services.json / GoogleService-Info.plist
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+      await FcmService().initialize();
+    } catch (e) {
+      debugPrint('Firebase init skipped: $e');
+    }
+  }
 
   await Supabase.initialize(
     url: 'https://oibboowecbxvjmookwtd.supabase.co',
@@ -120,10 +132,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
         debugPrint('Auth: signed in, redirecting to app');
         if (!mounted) return;
         setState(() => _showSplash = false);
+        FcmService().registerToken(session!.user.id);
         _checkAuthStatus();
       } else if (event == AuthChangeEvent.signedOut) {
         if (!mounted) return;
         setState(() => _showSplash = false);
+        FcmService().unregisterToken();
         SupabaseService.clearInMemoryCaches();
         navigatorKey.currentState?.pushReplacementNamed('/login');
       }
@@ -156,6 +170,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         navigatorKey.currentState?.pushReplacementNamed('/home');
         Future.microtask(() => SupabaseService.hydrateCachesFromDisk(user.id));
         Future.microtask(() => SupabaseService.refreshBootstrapCachesIfChanged(user.id));
+        Future.microtask(() => FcmService().registerToken(user.id));
         return;
       }
 
@@ -166,6 +181,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (!mounted) return;
       setState(() => _showSplash = false);
 
+      Future.microtask(() => FcmService().registerToken(user.id));
       if (profile == null) {
         navigatorKey.currentState?.pushReplacementNamed('/onboarding');
       } else {

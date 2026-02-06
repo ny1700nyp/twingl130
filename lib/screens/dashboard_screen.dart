@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/notification_service.dart';
 import '../services/quote_service.dart';
 import '../services/supabase_service.dart';
 import '../utils/time_utils.dart';
@@ -118,6 +119,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .subscribe();
   }
 
+  void _maybeShowNewMessageNotification(
+    String currentUserId,
+    String conversationId,
+    Map<String, dynamic> message,
+  ) {
+    final senderId = message['sender_id']?.toString();
+    if (senderId == null || senderId == currentUserId) return;
+    if (SupabaseService.currentlyViewingConversationId == conversationId) return;
+    if (!NotificationService().chatNotificationsEnabled.value) return;
+
+    final type = (message['type']?.toString() ?? 'text').toLowerCase();
+    if (type != 'text') return; // Only notify for regular chat messages
+
+    final content = message['content']?.toString() ??
+        message['message_text']?.toString() ??
+        'New message';
+
+    Future.microtask(() async {
+      try {
+        final profile = await SupabaseService.getPublicProfile(senderId);
+        final name = (profile?['display_name'] ?? profile?['username'])?.toString() ?? 'Someone';
+        await NotificationService().showNewMessageNotification(
+          senderName: name,
+          messageContent: content,
+          conversationId: conversationId,
+        );
+      } catch (_) {}
+    });
+  }
+
   void _syncMessageRealtimeSubscriptions(String userId, List<Map<String, dynamic>> conversations) {
     final wanted = <String>{};
     for (final c in conversations) {
@@ -152,11 +183,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Keep per-conversation cache warm for instant open, and refresh dashboard metadata (latest/unread).
           final row = payload.newRecord;
           if (row.isNotEmpty) {
+            final msg = Map<String, dynamic>.from(row);
             SupabaseService.upsertChatMessageIntoCache(
               userId: userId,
               conversationId: conversationId,
-              message: Map<String, dynamic>.from(row),
+              message: msg,
             );
+            // Show local notification if enabled and message is from other user
+            _maybeShowNewMessageNotification(userId, conversationId, msg);
           }
           SupabaseService.refreshChatConversationsIfChanged(userId);
         },

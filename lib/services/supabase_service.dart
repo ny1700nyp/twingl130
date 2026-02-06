@@ -45,6 +45,10 @@ class SupabaseService {
   static final Map<String, ValueNotifier<List<Map<String, dynamic>>?>> _chatMessagesCache = {};
   static final Map<String, DateTime> _chatMessagesPersistLastAt = {};
 
+  /// Conversation ID the user is currently viewing in ChatScreen. Used to suppress
+  /// new-message notifications while they're in that conversation.
+  static String? currentlyViewingConversationId;
+
   // Disk hydration guard
   static final Set<String> _diskHydratedUserIds = <String>{};
   // One-time "repair" guards (per app session) for older disk caches without markers.
@@ -487,17 +491,25 @@ class SupabaseService {
   }
 
   /// 메시지 목록 (created_at ASC)
+  /// [beforeCreatedAt]: 이 시각 이전(더 오래된) 메시지만 조회 (pagination용)
   static Future<List<Map<String, dynamic>>> getMessages(
     String conversationId, {
     int? limit,
+    String? beforeCreatedAt,
   }) async {
     try {
+      var query = supabase
+          .from('messages')
+          .select()
+          .eq('conversation_id', conversationId);
+
+      if (beforeCreatedAt != null) {
+        query = query.lt('created_at', beforeCreatedAt);
+      }
+
       if (limit != null) {
-        // Fetch newest N, then reverse so UI gets oldest→newest.
-        final dynamic response = await supabase
-            .from('messages')
-            .select()
-            .eq('conversation_id', conversationId)
+        // Fetch newest N (or oldest N before beforeCreatedAt), then reverse so UI gets oldest→newest.
+        final dynamic response = await query
             .order('created_at', ascending: false)
             .limit(limit);
         if (response is! List) return [];
@@ -506,11 +518,7 @@ class SupabaseService {
         return list.reversed.toList();
       }
 
-      final dynamic response = await supabase
-          .from('messages')
-          .select()
-          .eq('conversation_id', conversationId)
-          .order('created_at', ascending: true);
+      final dynamic response = await query.order('created_at', ascending: true);
       if (response is! List) return [];
       return response.map((e) => _normalizeMessageRow(Map<String, dynamic>.from(e))).toList();
     } catch (e) {
@@ -690,7 +698,7 @@ class SupabaseService {
       await sendMessage(
         conversationId: conversationId,
         senderId: traineeId,
-        messageText: 'Please discuss your schedule.',
+        messageText: 'Please discuss your availability, preferred location, and rates to kick things off.',
         type: 'system',
         metadata: const <String, dynamic>{
           'kind': 'schedule_prompt',
@@ -911,7 +919,9 @@ class SupabaseService {
     bool forceRefresh = false,
     int limit = 200,
   }) async {
-    await hydrateChatMessagesFromDisk(userId, conversationId);
+    if (!forceRefresh) {
+      await hydrateChatMessagesFromDisk(userId, conversationId);
+    }
 
     final notifier = chatMessagesCacheForConversation(conversationId);
     final cached = notifier.value;
@@ -923,6 +933,45 @@ class SupabaseService {
     notifier.value = fresh;
     await _persistChatMessagesToDisk(userId, conversationId, fresh);
     return fresh;
+  }
+
+  /// 위로 스크롤 시 더 오래된 메시지 로드. 반환: 로드된 개수 (0이면 더 이상 없음).
+  static Future<int> loadOlderChatMessages(
+    String userId,
+    String conversationId, {
+    int pageSize = 50,
+  }) async {
+    final notifier = chatMessagesCacheForConversation(conversationId);
+    final cached = notifier.value;
+    if (cached == null || cached.isEmpty) return 0;
+
+    final oldest = cached.first;
+    final beforeCreatedAt = oldest['created_at']?.toString();
+    if (beforeCreatedAt == null || beforeCreatedAt.isEmpty) return 0;
+
+    final older = await getMessages(
+      conversationId,
+      beforeCreatedAt: beforeCreatedAt,
+      limit: pageSize,
+    );
+    if (older.isEmpty) return 0;
+
+    final existingIds = cached.map((m) => m['id']?.toString()).whereType<String>().toSet();
+    final toPrepend = older.where((m) {
+      final id = m['id']?.toString();
+      return id != null && !existingIds.contains(id);
+    }).toList();
+    if (toPrepend.isEmpty) return 0;
+
+    final merged = [...toPrepend, ...cached];
+    merged.sort((a, b) {
+      final aAt = DateTime.tryParse(a['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bAt = DateTime.tryParse(b['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aAt.compareTo(bAt);
+    });
+    notifier.value = merged;
+    await _persistChatMessagesToDisk(userId, conversationId, merged);
+    return toPrepend.length;
   }
 
   static void upsertChatMessageIntoCache({

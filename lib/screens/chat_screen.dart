@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
 import '../utils/time_utils.dart';
 import 'profile_detail_screen.dart';
@@ -33,9 +34,20 @@ class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _inputFocusNode = FocusNode();
   final _scrollController = ScrollController();
+  final _firstUnreadKey = GlobalKey();
 
   Map<String, dynamic>? _conversation;
   bool _isSending = false;
+  /// ID of the oldest unread message from the other person (before marking read).
+  String? _firstUnreadMessageId;
+  /// Index in filtered messages list for scroll positioning (ListView.builder builds lazily).
+  int? _firstUnreadMessageIndex;
+  /// Total filtered message count when first unread was found (for proportional scroll).
+  int? _filteredMessageCount;
+  bool _isLoadingMore = false;
+  bool _hasNoMoreOlder = false;
+  /// 초기 스크롤 적용 전까지 메시지 목록 숨김 (잘못된 위치 노출 방지)
+  bool _initialScrollApplied = false;
 
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _conversationChannel;
@@ -43,6 +55,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    SupabaseService.currentlyViewingConversationId = widget.conversationId;
+    _scrollController.addListener(_onScroll);
     _loadConversationAndMessages();
     _subscribeToMessagesRealtime();
     _subscribeToConversationRealtime();
@@ -50,6 +64,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    if (SupabaseService.currentlyViewingConversationId == widget.conversationId) {
+      SupabaseService.currentlyViewingConversationId = null;
+    }
     _messagesChannel?.unsubscribe();
     _conversationChannel?.unsubscribe();
     _controller.dispose();
@@ -62,27 +80,55 @@ class _ChatScreenState extends State<ChatScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    // Cache-first messages
+    // Hydrate from disk for immediate display, then always fetch latest from server
+    // so messages received while app was in background are shown.
     await SupabaseService.hydrateChatMessagesFromDisk(user.id, widget.conversationId);
-    await SupabaseService.getChatMessagesCached(
+    final fresh = await SupabaseService.getChatMessagesCached(
       user.id,
       widget.conversationId,
-      // If cache is empty, force refresh
-      forceRefresh: SupabaseService.chatMessagesCacheForConversation(widget.conversationId).value == null,
+      forceRefresh: true,
       limit: 200,
     );
+
+    if (mounted) {
+      setState(() {
+        _hasNoMoreOlder = fresh.length < 200;
+      });
+    }
 
     // Conversation state
     final conv = await SupabaseService.getConversation(widget.conversationId);
     if (!mounted) return;
+
+    // Find oldest unread message from other (before marking read)
+    final raw = SupabaseService.chatMessagesCacheForConversation(widget.conversationId).value ?? [];
+    final filtered = raw.where((m) => !_shouldHideSystemMessage(m)).toList();
+    String? firstUnreadId;
+    int? firstUnreadIndex;
+    for (var i = 0; i < filtered.length; i++) {
+      final m = filtered[i];
+      final senderId = m['sender_id']?.toString();
+      final isRead = m['is_read'];
+      if (senderId != null && senderId != user.id) {
+        if (isRead != true) {
+          firstUnreadId = m['id']?.toString();
+          firstUnreadIndex = i;
+          break;
+        }
+      }
+    }
+
     setState(() {
       _conversation = conv;
+      _firstUnreadMessageId = firstUnreadId;
+      _firstUnreadMessageIndex = firstUnreadIndex;
+      _filteredMessageCount = filtered.length;
     });
 
     // Mark read
     await SupabaseService.markMessagesAsRead(widget.conversationId, user.id);
 
-    _scrollToBottom();
+    _scrollToInitialPosition();
   }
 
   void _subscribeToMessagesRealtime() {
@@ -185,7 +231,111 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  static const double _loadMoreThreshold = 150;
+
+  void _onScroll() {
+    if (_isLoadingMore || _hasNoMoreOlder) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels <= _loadMoreThreshold) {
+      _loadOlderMessages();
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || _isLoadingMore || _hasNoMoreOlder) return;
+
+    setState(() => _isLoadingMore = true);
+    final oldOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+    try {
+      final count = await SupabaseService.loadOlderChatMessages(
+        user.id,
+        widget.conversationId,
+        pageSize: 50,
+      );
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+          if (count < 50) _hasNoMoreOlder = true;
+        });
+        if (count > 0 && _scrollController.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_scrollController.hasClients) return;
+            final newOffset = oldOffset + count * _estimatedItemHeight;
+            _scrollController.jumpTo(
+              newOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+            );
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  static const double _estimatedItemHeight = 72.0;
+
+  void _scrollToInitialPosition() {
+    if (!_scrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final pos = _scrollController.position;
+      if (_firstUnreadMessageId != null && _firstUnreadMessageIndex != null) {
+        // ListView.builder builds lazily; first jump to approximate position so the item gets built.
+        // If approxOffset exceeds maxScrollExtent (estimate too high), use proportional position.
+        final approxOffset = _firstUnreadMessageIndex! * _estimatedItemHeight;
+        final totalCount = _filteredMessageCount ?? 200;
+        final targetOffset = approxOffset <= pos.maxScrollExtent
+            ? approxOffset.clamp(0.0, pos.maxScrollExtent)
+            : (_firstUnreadMessageIndex! / totalCount) * pos.maxScrollExtent;
+        _scrollController.jumpTo(targetOffset.clamp(0.0, pos.maxScrollExtent));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final hasContext = _firstUnreadKey.currentContext != null;
+          if (hasContext) {
+            Scrollable.ensureVisible(
+              _firstUnreadKey.currentContext!,
+              alignment: 0.0,
+              duration: Duration.zero,
+              curve: Curves.linear,
+            );
+          }
+          if (mounted) setState(() => _initialScrollApplied = true);
+        });
+      } else if (_scrollController.hasClients) {
+        _scrollController.jumpTo(
+          _scrollController.position.maxScrollExtent + 120,
+        );
+        if (mounted) setState(() => _initialScrollApplied = true);
+      }
+    });
+  }
+
   bool _isSystem(Map<String, dynamic> m) => (m['type'] as String?) == 'system';
+
+  Widget _buildUnreadDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: Theme.of(context).colorScheme.outline.withOpacity(0.5))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Unread',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: Theme.of(context).colorScheme.outline.withOpacity(0.5))),
+        ],
+      ),
+    );
+  }
 
   bool _shouldHideSystemMessage(Map<String, dynamic> m) {
     if (!_isSystem(m)) return false;
@@ -277,9 +427,16 @@ class _ChatScreenState extends State<ChatScreen> {
       await SupabaseService.sendMessage(
         conversationId: widget.conversationId,
         senderId: currentUser.id,
-        messageText: 'Accepted. You can chat now. Please discuss your schedule.',
+        messageText: 'Accepted. You can chat now.',
         type: 'system',
         metadata: const <String, dynamic>{'kind': 'request_accepted'},
+      );
+      await SupabaseService.sendMessage(
+        conversationId: widget.conversationId,
+        senderId: currentUser.id,
+        messageText: 'Please discuss your availability, preferred location, and rates to kick things off.',
+        type: 'system',
+        metadata: const <String, dynamic>{'kind': 'schedule_prompt'},
       );
 
       final conv = await SupabaseService.getConversation(widget.conversationId);
@@ -452,12 +609,32 @@ class _ChatScreenState extends State<ChatScreen> {
       prev: prevMessage == null ? null : _messageCreatedAtLocal(prevMessage),
       curr: _messageCreatedAtLocal(m),
     );
+    final metadata = m['metadata'];
+    String? kind;
+    if (metadata is Map<String, dynamic>) {
+      kind = metadata['kind'] as String?;
+    } else if (metadata is Map) {
+      kind = (metadata['kind'] as dynamic)?.toString();
+    }
+    final isQuoteStyleSystem =
+        isSystem && (kind == 'request_accepted' || kind == 'schedule_prompt');
 
-    final bubbleColor = isSystem
-        ? Colors.grey.shade200
-        : isMe
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
-            : Theme.of(context).colorScheme.surfaceVariant;
+    final currentUserId = currentUser?.id;
+    final traineeId = _conversation?['trainee_id'] as String?;
+    final isRequestSender = currentUserId != null && currentUserId == traineeId;
+    final quoteGradient = isQuoteStyleSystem
+        ? (isRequestSender
+            ? [AppTheme.twinglMint, AppTheme.twinglPurple]
+            : [AppTheme.twinglPurple, AppTheme.twinglMint])
+        : null;
+
+    final bubbleColor = quoteGradient != null
+        ? null
+        : isSystem
+            ? Colors.grey.shade200
+            : isMe
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.12)
+                : Theme.of(context).colorScheme.surfaceContainerHighest;
     final align = isSystem ? Alignment.center : (isMe ? Alignment.centerRight : Alignment.centerLeft);
 
     return Align(
@@ -491,13 +668,35 @@ class _ChatScreenState extends State<ChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: bubbleColor,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(quoteGradient != null ? 16 : 14),
+                        boxShadow: quoteGradient != null
+                            ? [
+                                BoxShadow(
+                                  color: quoteGradient.first.withAlpha(40),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
+                        gradient: quoteGradient != null
+                            ? LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: quoteGradient,
+                              )
+                            : null,
                       ),
                       child: Text(
                         text,
                         style: TextStyle(
-                          color: isSystem ? Colors.grey.shade800 : null,
-                          fontWeight: isSystem ? FontWeight.w600 : FontWeight.normal,
+                          color: quoteGradient != null
+                              ? Colors.white.withAlpha(250)
+                              : isSystem
+                                  ? Colors.grey.shade800
+                                  : null,
+                          fontWeight: isSystem || quoteGradient != null
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -745,13 +944,9 @@ class _ChatScreenState extends State<ChatScreen> {
       alignment: Alignment.centerLeft,
       child: InkWell(
         onTap: _openOtherProfilePopup,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(999),
-          ),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -759,14 +954,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Text(
                   otherName,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
               Icon(
                 Icons.visibility_outlined,
-                size: 14,
-                color: Theme.of(context).colorScheme.onSurface.withAlpha(140),
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(200),
               ),
             ],
           ),
@@ -822,15 +1020,57 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   final messages = value.where((m) => !_shouldHideSystemMessage(m)).toList();
+                  final showContent = _initialScrollApplied;
+                  final showTopLoader = _isLoadingMore;
+                  final itemCount = messages.length + (showTopLoader ? 1 : 0);
 
-                  return ListView.builder(
+                  return Stack(
+                    children: [
+                      if (!showContent)
+                        const Center(child: CircularProgressIndicator()),
+                      Opacity(
+                        opacity: showContent ? 1 : 0,
+                        child: IgnorePointer(
+                          ignoring: !showContent,
+                          child: ListView.builder(
                     controller: _scrollController,
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) =>
-                        _buildMessageBubble(
-                          messages[i],
-                          prevMessage: i > 0 ? messages[i - 1] : null,
+                    itemCount: itemCount,
+                    itemBuilder: (_, i) {
+                      if (showTopLoader && i == 0) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Center(child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )),
+                        );
+                      }
+                      final msgIndex = showTopLoader ? i - 1 : i;
+                      final m = messages[msgIndex];
+                      final isFirstUnread = _firstUnreadMessageId != null &&
+                          (m['id']?.toString() == _firstUnreadMessageId);
+                      final bubble = _buildMessageBubble(
+                        m,
+                        prevMessage: msgIndex > 0 ? messages[msgIndex - 1] : null,
+                      );
+                      if (isFirstUnread) {
+                        return Column(
+                          key: _firstUnreadKey,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildUnreadDivider(),
+                            bubble,
+                          ],
+                        );
+                      }
+                      return bubble;
+                    },
+                  ),
+                          ),
                         ),
+                    ],
                   );
                 },
               ),

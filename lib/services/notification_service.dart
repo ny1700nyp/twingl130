@@ -1,9 +1,13 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/supabase_service.dart';
+import 'fcm_service.dart';
+import 'supabase_service.dart';
 import '../screens/chat_screen.dart';
+
+const String _kChatNotificationsEnabled = 'chat_notifications_enabled';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,6 +17,30 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   GlobalKey<NavigatorState>? _navigatorKey;
+
+  /// Chat notification on/off preference. Default true.
+  final ValueNotifier<bool> chatNotificationsEnabled = ValueNotifier<bool>(true);
+
+  /// Load and start listening to chat notification preference.
+  Future<void> loadChatNotificationPreference() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      chatNotificationsEnabled.value = prefs.getBool(_kChatNotificationsEnabled) ?? true;
+    } catch (_) {}
+  }
+
+  /// Set chat notification on/off and persist.
+  Future<void> setChatNotificationsEnabled(bool enabled) async {
+    if (kIsWeb) return;
+    chatNotificationsEnabled.value = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kChatNotificationsEnabled, enabled);
+      // Sync to FCM token table for background push
+      await FcmService().updateNotificationsEnabled(enabled);
+    } catch (_) {}
+  }
 
   /// Navigator key 설정 (앱 시작 시 main.dart에서 호출)
   void setNavigatorKey(GlobalKey<NavigatorState> key) {
@@ -39,6 +67,7 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
     _initialized = true;
+    await loadChatNotificationPreference();
   }
 
   /// 알림 탭 시 처리: 해당 대화로 이동
