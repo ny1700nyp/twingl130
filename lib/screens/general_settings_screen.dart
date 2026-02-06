@@ -21,7 +21,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Leave Twingl'),
         content: const Text(
-          'Your liked list and blocked list will be cleared, and your profile will be removed '
+          'Your liked list, blocked list, and chat history will be cleared, and your profile will be removed '
           'so you can go through onboarding again when you sign in next time. Your account will remain.',
         ),
         actions: [
@@ -89,7 +89,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              subtitle: const Text('Clear liked & blocked lists, re-do onboarding on next login'),
+              subtitle: const Text('Clear liked, blocked, chat history'),
               enabled: !_isDeleting,
               onTap: _isDeleting ? null : _onDeleteAccountTap,
               trailing: _isDeleting

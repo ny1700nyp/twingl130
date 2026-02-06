@@ -1331,6 +1331,7 @@ class _AccountCardContent extends StatelessWidget {
           child: Text(
             'Your account will stay, but:\n\n'
             '• Your liked list and blocked list will be cleared.\n'
+            '• Your chat history will be deleted.\n'
             '• Your profile will be removed so you can go through onboarding again when you sign in next time.\n\n'
             'Are you sure you want to leave Twingl?',
           ),
@@ -1464,7 +1465,7 @@ class _AccountCardContent extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              'Clear liked & blocked lists, re-do onboarding on next login',
+              'Clear liked, blocked, chat history',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.error.withOpacity(0.8),
                   ),
