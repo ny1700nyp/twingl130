@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -346,6 +346,96 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingNotice() {
+    const pendingGradient = [AppTheme.secondaryGold, AppTheme.twinglMint];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: pendingGradient,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: pendingGradient.first.withAlpha(40),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Text(
+            'Chat is only available after the other person accepts your first class request. Please wait.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withAlpha(250),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeclinedNotice() {
+    const declinedGradient = [AppTheme.secondaryGold, Color(0xFFDC2626)];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: declinedGradient,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: declinedGradient.first.withAlpha(40),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Your request was declined. Please feel free to send a new request when you\'re ready.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withAlpha(250),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You might also consider finding another tutor.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withAlpha(230),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -839,15 +929,19 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     final isQuoteStyleSystem =
         isSystem && (kind == 'request_accepted' || kind == 'schedule_prompt');
+    const declinedMessageGradient = [AppTheme.secondaryGold, Color(0xFFDC2626)];
+    final isDeclineReason = isSystem && kind == 'decline_reason';
 
     final currentUserId = currentUser?.id;
     final traineeId = _conversation?['trainee_id'] as String?;
     final isRequestSender = currentUserId != null && currentUserId == traineeId;
-    final quoteGradient = isQuoteStyleSystem
-        ? (isRequestSender
-            ? [AppTheme.twinglMint, AppTheme.twinglPurple]
-            : [AppTheme.twinglPurple, AppTheme.twinglMint])
-        : null;
+    final quoteGradient = isDeclineReason
+        ? declinedMessageGradient
+        : (isQuoteStyleSystem
+            ? (isRequestSender
+                ? [AppTheme.twinglMint, AppTheme.twinglPurple]
+                : [AppTheme.twinglPurple, AppTheme.twinglMint])
+            : null);
 
     final bubbleColor = quoteGradient != null
         ? null
@@ -910,12 +1004,12 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Text(
                         text,
                         style: TextStyle(
-                          color: quoteGradient != null
+                          color: (quoteGradient != null || isDeclineReason)
                               ? Colors.white.withAlpha(250)
                               : isSystem
                                   ? Colors.grey.shade800
                                   : null,
-                          fontWeight: isSystem || quoteGradient != null
+                          fontWeight: isSystem || quoteGradient != null || isDeclineReason
                               ? FontWeight.w600
                               : FontWeight.normal,
                         ),
@@ -1205,25 +1299,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final title = Row(
       children: [
         Expanded(child: _otherNameButton(otherName)),
-        if (showPending || showDeclined)
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: (showPending ? Colors.orange : Colors.red).withAlpha(38),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                showPending ? 'Pending' : 'Declined',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: showPending ? Colors.orange.shade900 : Colors.red.shade900,
-                ),
-              ),
-            ),
-          ),
       ],
     );
 
@@ -1232,6 +1307,8 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (showPending) _buildPendingNotice(),
+            if (showDeclined) _buildDeclinedNotice(),
             if (chatEnabled) _buildPaymentNotice(),
             Expanded(
               child: ValueListenableBuilder<List<Map<String, dynamic>>?>(
@@ -1359,7 +1436,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       enabled: chatEnabled,
                       decoration: InputDecoration(
                         hintText: showPending
-                            ? 'Pending... (wait for accept)'
+                            ? 'Waiting for Accept'
                             : showDeclined
                                 ? 'Declined'
                                 : 'Message...',

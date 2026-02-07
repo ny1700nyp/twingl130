@@ -1332,7 +1332,7 @@ class _AccountCardContent extends StatelessWidget {
             'Your account will stay, but:\n\n'
             '• Your liked list and blocked list will be cleared.\n'
             '• Your chat history will be deleted.\n'
-            '• Your profile will be removed so you can go through onboarding again when you sign in next time.\n\n'
+            '• Your profile will be removed.\n\n'
             'Are you sure you want to leave Twingl?',
           ),
         ),

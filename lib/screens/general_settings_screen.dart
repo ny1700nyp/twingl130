@@ -21,8 +21,8 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Leave Twingl'),
         content: const Text(
-          'Your liked list, blocked list, and chat history will be cleared, and your profile will be removed '
-          'so you can go through onboarding again when you sign in next time. Your account will remain.',
+          'Your liked list, blocked list, and chat history will be cleared, and your profile will be removed. '
+          'Your account will remain.',
         ),
         actions: [
           TextButton(
