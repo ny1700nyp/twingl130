@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../l10n/app_localizations.dart';
 import 'persistent_cache.dart';
 import '../utils/time_utils.dart';
 
@@ -182,9 +183,9 @@ class SupabaseService {
   /// Reset current user data for re-onboarding: clear conversations (and messages), liked list,
   /// blocked list, and profile so that on next login the user goes through onboarding again.
   /// Does not delete the Auth account.
-  static Future<void> resetUserDataForReOnboarding() async {
+  static Future<void> resetUserDataForReOnboarding({AppLocalizations? l10n}) async {
     final userId = supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('Not signed in');
+    if (userId == null) throw Exception(l10n?.notSignedIn ?? 'Not signed in');
 
     await supabase
         .from('conversations')
@@ -209,10 +210,10 @@ class SupabaseService {
   /// the user's JWT; the function uses service role to delete the user. Works for email and
   /// Google (and other OAuth) sign-in. Requires the delete-user Edge Function to be deployed.
   /// Uses raw HTTP so only Bearer token is sent (avoids client overriding Authorization).
-  static Future<void> deleteCurrentUserAccount() async {
+  static Future<void> deleteCurrentUserAccount({AppLocalizations? l10n}) async {
     await supabase.auth.refreshSession();
     final session = supabase.auth.currentSession;
-    if (session == null) throw Exception('Not signed in');
+    if (session == null) throw Exception(l10n?.notSignedIn ?? 'Not signed in');
     final token = session.accessToken;
     final uri = Uri.parse('$_supabaseUrl/functions/v1/delete-user');
     final response = await http.post(
@@ -230,7 +231,7 @@ class SupabaseService {
           msg = (data['error'] ?? data['msg'])?.toString();
         }
       } catch (_) {}
-      throw Exception(msg ?? 'Account deletion failed (${response.statusCode})');
+      throw Exception(msg ?? (l10n?.accountDeletionFailed(response.statusCode) ?? 'Account deletion failed (${response.statusCode})'));
     }
   }
 
@@ -347,9 +348,9 @@ class SupabaseService {
   static const Set<String> _profileGeneratedColumns = {'geom_geog'};
 
   /// 프로필 생성/업데이트 (온보딩 저장용)
-  static Future<void> upsertProfile(Map<String, dynamic> profile) async {
+  static Future<void> upsertProfile(Map<String, dynamic> profile, {AppLocalizations? l10n}) async {
     final user = supabase.auth.currentUser;
-    if (user == null) throw Exception('No authenticated user found');
+    if (user == null) throw Exception(l10n?.noAuthenticatedUserFound ?? 'No authenticated user found');
 
     final payload = Map<String, dynamic>.from(profile);
     for (final key in _profileGeneratedColumns) {
@@ -400,6 +401,7 @@ class SupabaseService {
   static Future<void> removeFavorite({
     required String currentUserId,
     required String swipedUserId,
+    AppLocalizations? l10n,
   }) async {
     final res = await supabase
         .from('matches')
@@ -411,7 +413,7 @@ class SupabaseService {
         .select('id');
 
     if (res.isEmpty) {
-      throw Exception('No rows deleted. Check matches RLS DELETE policy.');
+      throw Exception(l10n?.noRowsDeletedCheckMatchesRls ?? 'No rows deleted. Check matches RLS DELETE policy.');
     }
   }
 
@@ -659,6 +661,7 @@ class SupabaseService {
     required String traineeId,
     required String skill,
     required String method,
+    AppLocalizations? l10n,
   }) async {
     // 1) Find existing conversations between the same pair.
     //
@@ -724,7 +727,7 @@ class SupabaseService {
     await sendMessage(
       conversationId: conversationId,
       senderId: traineeId,
-      messageText: 'Request: $skill ($method)',
+      messageText: l10n?.requestMessage(skill, method) ?? 'Request: $skill ($method)',
       type: 'request',
       metadata: <String, dynamic>{
         'kind': 'training_request',
@@ -740,7 +743,7 @@ class SupabaseService {
       await sendMessage(
         conversationId: conversationId,
         senderId: traineeId,
-        messageText: 'Please discuss your availability, preferred location, and rates to kick things off.',
+        messageText: l10n?.schedulePromptMessage ?? 'Please discuss your availability, preferred location, and rates to kick things off.',
         type: 'system',
         metadata: const <String, dynamic>{
           'kind': 'schedule_prompt',
@@ -1573,6 +1576,7 @@ class SupabaseService {
     required bool isMatch,
     Map<String, dynamic>? swipedProfile,
     String? favoriteTab,
+    AppLocalizations? l10n,
   }) async {
     print('========================================');
     print('SupabaseService.saveMatch 시작');
@@ -1600,7 +1604,7 @@ class SupabaseService {
       print('  - Session 존재: ${currentAuthUser != null}');
       
       if (currentAuthUser == null) {
-        throw Exception('No authenticated user found');
+        throw Exception(l10n?.noAuthenticatedUserFound ?? 'No authenticated user found');
       }
       
       // user_id가 현재 인증된 사용자와 일치하는지 확인
@@ -2243,11 +2247,12 @@ class SupabaseService {
   static Future<void> updateUserLocation({
     required double latitude,
     required double longitude,
+    AppLocalizations? l10n,
   }) async {
     try {
       final user = supabase.auth.currentUser;
       if (user == null) {
-        throw Exception('No authenticated user found');
+        throw Exception(l10n?.noAuthenticatedUserFound ?? 'No authenticated user found');
       }
 
       print('위치 정보 업데이트 시작');
@@ -2616,11 +2621,12 @@ class SupabaseService {
   static Future<void> saveUserAgreement({
     required String agreementType,
     required String version,
+    AppLocalizations? l10n,
   }) async {
     try {
       final user = supabase.auth.currentUser;
       if (user == null) {
-        throw Exception('User not authenticated');
+        throw Exception(l10n?.userNotAuthenticated ?? 'User not authenticated');
       }
 
       await supabase.from('user_agreements').insert({

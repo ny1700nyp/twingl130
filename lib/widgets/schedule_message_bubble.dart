@@ -2,6 +2,7 @@ import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 /// Renders a chat bubble for schedule proposal messages with an "Add to Calendar" action.
@@ -47,7 +48,7 @@ class ScheduleMessageBubble extends StatelessWidget {
     if (dt == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid date in this proposal')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.invalidDateInProposal)),
         );
       }
       return;
@@ -72,13 +73,13 @@ class ScheduleMessageBubble extends StatelessWidget {
       Add2Calendar.addEvent2Cal(event);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Added to calendar')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.addedToCalendar)),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add to calendar: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.failedToAddToCalendar(e.toString()))),
         );
       }
     }
@@ -103,7 +104,7 @@ class ScheduleMessageBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Add to ',
+                AppLocalizations.of(context)!.addToCalendar,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppTheme.primaryGreen,
                   fontWeight: FontWeight.w600,

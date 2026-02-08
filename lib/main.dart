@@ -3,9 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_navigation.dart' show navigatorKey;
+import 'l10n/app_localizations.dart';
+import 'providers/locale_provider.dart';
 import 'screens/login_screen.dart';
 import 'services/fcm_service.dart';
 import 'screens/main_screen.dart';
@@ -60,7 +64,16 @@ Future<void> main() async {
   // Notification service: set key for deep links; init & permissions deferred so first paint is not blocked.
   NotificationService().setNavigatorKey(navigatorKey);
 
-  runApp(const TwinglApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) {
+        final provider = LocaleProvider();
+        provider.fetchLocale();
+        return provider;
+      },
+      child: const TwinglApp(),
+    ),
+  );
 }
 
 class TwinglApp extends StatelessWidget {
@@ -68,6 +81,7 @@ class TwinglApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeProvider = context.watch<LocaleProvider>();
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Twingl',
@@ -75,6 +89,16 @@ class TwinglApp extends StatelessWidget {
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
       themeMode: ThemeMode.system,
+      locale: localeProvider.locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: (Locale? locale, Iterable<Locale> supportedLocales) {
+        if (locale == null) return null;
+        for (final supported in supportedLocales) {
+          if (supported.languageCode == locale.languageCode) return supported;
+        }
+        return const Locale('en');
+      },
       routes: {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginScreen(),
@@ -89,8 +113,8 @@ class TwinglApp extends StatelessWidget {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           final userId = args?['userId'] as String?;
           if (userId == null || userId.isEmpty) {
-            return const Scaffold(
-              body: SafeArea(child: Center(child: Text('Invalid profile link'))),
+            return Scaffold(
+              body: SafeArea(child: Center(child: Text(AppLocalizations.of(context)!.invalidProfileLink))),
             );
           }
           return PublicProfileScreen(userId: userId);
@@ -132,7 +156,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         debugPrint('Auth: signed in, redirecting to app');
         if (!mounted) return;
         setState(() => _showSplash = false);
-        FcmService().registerToken(session!.user.id);
+        FcmService().registerToken(session.user.id);
         _checkAuthStatus();
       } else if (event == AuthChangeEvent.signedOut) {
         if (!mounted) return;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../app_navigation.dart' show navigatorKey;
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 
 class GeneralSettingsScreen extends StatefulWidget {
@@ -18,26 +19,26 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Twingl'),
-        content: const Text(
-          'Your liked list, blocked list, and chat history will be cleared, and your profile will be removed. '
-          'Your account will remain.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.leaveTwingl),
+          content: Text(l10n.leaveTwinglDialogMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.no),
             ),
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: Text(l10n.yes),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed != true || !mounted) return;
@@ -59,7 +60,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to leave Twingl: $e'),
+          content: Text(AppLocalizations.of(context)!.failedToLeaveTwingl(e.toString())),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -72,7 +73,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('General Settings'),
+        title: Text(AppLocalizations.of(context)!.generalSettings),
       ),
       body: SafeArea(
         child: ListView(
@@ -83,13 +84,13 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Leave Twingl',
+                AppLocalizations.of(context)!.leaveTwingl,
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.error,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              subtitle: const Text('Clear liked, blocked, chat history'),
+              subtitle: Text(AppLocalizations.of(context)!.clearLikedBlockedChatHistory),
               enabled: !_isDeleting,
               onTap: _isDeleting ? null : _onDeleteAccountTap,
               trailing: _isDeleting

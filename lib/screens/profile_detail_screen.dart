@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/distance_formatter.dart';
 import '../widgets/avatar_with_type_badge.dart';
 import '../widgets/user_stats_widget.dart';
@@ -60,20 +61,24 @@ class ProfileDetailScreen extends StatelessWidget {
     }
   }
 
-  String _genderLabel(String? gender) {
+  String _genderLabel(BuildContext context, String? gender) {
     if (gender == null) return '';
-    final g = gender.trim();
+    final g = gender.trim().toLowerCase();
     if (g.isEmpty) return '';
-    if (g == 'Prefer not to say') return '';
+    if (g == 'prefer not to say') return '';
+    final l10n = AppLocalizations.of(context)!;
     switch (g) {
       case 'man':
-        return 'Man';
+      case 'male':
+        return l10n.man;
       case 'woman':
-        return 'Woman';
+      case 'female':
+        return l10n.woman;
       case 'non-binary':
-        return 'Non-binary';
+      case 'nonbinary':
+        return l10n.nonBinary;
       default:
-        return g;
+        return gender.trim();
     }
   }
 
@@ -216,7 +221,7 @@ class ProfileDetailScreen extends StatelessWidget {
     );
   }
 
-  String _formatDistance(double distanceMeters) => formatDistanceMeters(distanceMeters);
+  String _formatDistance(BuildContext context, double distanceMeters) => formatDistanceMeters(context, distanceMeters);
 
   Widget _buildProfileImage(BuildContext context, String? imagePath) {
     final imageBox = SizedBox(
@@ -292,28 +297,29 @@ class ProfileDetailScreen extends StatelessWidget {
     if (!isTutorOrTwiner) return const SizedBox.shrink();
 
     final color = iconColor ?? _colorForUserType(profile['user_type'] as String?);
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<String>(
       icon: Icon(Icons.share_outlined, color: color),
-      tooltip: 'Share',
+      tooltip: l10n.share,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'copy',
           child: Row(
             children: [
-              Icon(Icons.copy, size: 20),
-              SizedBox(width: 12),
-              Text('Copy Link'),
+              const Icon(Icons.copy, size: 20),
+              const SizedBox(width: 12),
+              Text(l10n.copyLink),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'share',
           child: Row(
             children: [
-              Icon(Icons.share, size: 20),
-              SizedBox(width: 12),
-              Text('Share'),
+              const Icon(Icons.share, size: 20),
+              const SizedBox(width: 12),
+              Text(l10n.share),
             ],
           ),
         ),
@@ -344,16 +350,16 @@ class ProfileDetailScreen extends StatelessWidget {
     final link = _generateProfileLinkStatic(profile);
     if (link.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to generate profile link.')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.unableToGenerateProfileLink)),
       );
       return;
     }
     await Clipboard.setData(ClipboardData(text: link));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile link copied to clipboard!'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.profileLinkCopiedToClipboard),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -368,7 +374,7 @@ class ProfileDetailScreen extends StatelessWidget {
     final link = _generateProfileLinkStatic(profile);
     if (link.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to generate profile link.')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.unableToGenerateProfileLink)),
       );
       return;
     }
@@ -379,7 +385,7 @@ class ProfileDetailScreen extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to share: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.failedToShare(e.toString()))),
         );
       }
     }
@@ -487,7 +493,7 @@ class ProfileDetailScreen extends StatelessWidget {
     
     if (trainerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to send request.')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.unableToSendRequest)),
       );
       return;
     }
@@ -523,9 +529,9 @@ class ProfileDetailScreen extends StatelessWidget {
 
       // Show feedback on the parent scaffold (avoids "no ScaffoldMessenger" errors).
       parentMessenger.showSnackBar(
-        const SnackBar(
-          content: Text('Sent'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.sent),
+          duration: const Duration(seconds: 2),
         ),
       );
 
@@ -549,6 +555,7 @@ class ProfileDetailScreen extends StatelessWidget {
 
   // 공유 버튼 위젯
   Widget _buildShareButton(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<String>(
       icon: Container(
         padding: const EdgeInsets.all(8),
@@ -572,7 +579,7 @@ class ProfileDetailScreen extends StatelessWidget {
             children: [
               const Icon(Icons.copy, size: 20),
               const SizedBox(width: 12),
-              const Text('Copy Link'),
+              Text(l10n.copyLink),
             ],
           ),
         ),
@@ -582,7 +589,7 @@ class ProfileDetailScreen extends StatelessWidget {
             children: [
               const Icon(Icons.share, size: 20),
               const SizedBox(width: 12),
-              const Text('Share'),
+              Text(l10n.share),
             ],
           ),
         ),
@@ -599,7 +606,8 @@ class ProfileDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = profile['name'] as String? ?? 'No name';
+    final l10n = AppLocalizations.of(context)!;
+    final name = profile['name'] as String? ?? l10n.unknownName;
     final age = profile['age'] as int?;
     final gender = profile['gender'] as String?;
     final userType = (profile['user_type'] as String?)?.trim().toLowerCase() ?? '';
@@ -653,7 +661,7 @@ class ProfileDetailScreen extends StatelessWidget {
     final effectiveCurrentUserProfile = currentUserProfile ?? SupabaseService.currentUserProfileCache.value;
     final distanceMeters = (profile['distance_meters'] as num?)?.toDouble() ??
         _distanceMetersToProfile(profile, effectiveCurrentUserProfile);
-    final distanceLabel = distanceMeters == null ? null : _formatDistance(distanceMeters);
+    final distanceLabel = distanceMeters == null ? null : _formatDistance(context, distanceMeters);
 
     // AppBar에 이름·나이대·성별 표시 (다른 사람 프로필 + 내 프로필 동일 형식)
     final shouldShowCustomAppBar = !hideAppBar;
@@ -662,7 +670,7 @@ class ProfileDetailScreen extends StatelessWidget {
     Widget? appBarTitle;
     if (shouldShowCustomAppBar) {
       final ageText = age != null ? _formatAgeRange(age, profile['created_at'] as String?) : null;
-      final genderText = _genderLabel(gender);
+      final genderText = _genderLabel(context, gender);
       final ageGenderText = <String>[
         if (ageText != null && ageText.isNotEmpty) ageText,
         if (genderText.isNotEmpty) genderText,
@@ -709,7 +717,7 @@ class ProfileDetailScreen extends StatelessWidget {
             )
           : nameAndAge;
     } else {
-      appBarTitle = const Text('Profile Details');
+      appBarTitle = Text(l10n.profileDetails);
     }
 
     final isSignedIn = Supabase.instance.client.auth.currentUser != null;
@@ -768,7 +776,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         onPressed: () => _showRequestTrainModal(context),
                         icon: const Icon(Icons.school, size: 18),
                         label: Text(
-                          'Request Training',
+                          l10n.requestTraining,
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -793,7 +801,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         },
                         icon: const Icon(Icons.chat_bubble_outline, size: 18),
                         label: Text(
-                          'Chat history',
+                          l10n.chatHistory,
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -891,7 +899,7 @@ class ProfileDetailScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'My Activity Stats',
+                              l10n.myActivityStats,
                               style: TextStyle(
                                 fontSize: sectionTitleFontSize,
                                 fontWeight: FontWeight.bold,
@@ -922,7 +930,7 @@ class ProfileDetailScreen extends StatelessWidget {
                                 return Row(
                                   children: [
                                     Text(
-                                      'My Details',
+                                      l10n.myDetails,
                                       style: TextStyle(
                                         fontSize: sectionTitleFontSize,
                                         fontWeight: FontWeight.bold,
@@ -969,21 +977,21 @@ class ProfileDetailScreen extends StatelessWidget {
                             ),
                             // About me
                             if (aboutMe != null && aboutMe.isNotEmpty) ...[
-                              Text('About me', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.aboutMe, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Text(aboutMe, style: const TextStyle(fontSize: 14, height: 1.35)),
                               SizedBox(height: sectionSpacing),
                             ],
                             // About the lesson
                             if ((userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
-                              Text('About the lesson', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.aboutTheLesson, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Text(experienceDescription, style: const TextStyle(fontSize: 14, height: 1.35)),
                               SizedBox(height: sectionSpacing),
                             ],
                             // I can teach
                             if ((userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
-                              Text('I can teach', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.iCanTeach, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 8,
@@ -994,7 +1002,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             ],
                             // I want to learn (Twiner)
                             if (userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
-                              Text('I want to learn', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.iWantToLearn, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 8,
@@ -1005,14 +1013,14 @@ class ProfileDetailScreen extends StatelessWidget {
                             ],
                             // Lesson location
                             if ((userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
-                              Text('Lesson location', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.lessonLocation, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: [
-                                  if (teachingMethods.contains('onsite')) _buildProfileChip(context, 'Onsite', highlighted: false),
-                                  if (teachingMethods.contains('online')) _buildProfileChip(context, 'Online', highlighted: false),
+                                  if (teachingMethods.contains('onsite')) _buildProfileChip(context, l10n.onsite, highlighted: false),
+                                  if (teachingMethods.contains('online')) _buildProfileChip(context, l10n.online, highlighted: false),
                                 ],
                               ),
                               SizedBox(height: sectionSpacing),
@@ -1024,7 +1032,7 @@ class ProfileDetailScreen extends StatelessWidget {
                                   children: [
                                     Icon(Icons.attach_money, color: Theme.of(context).colorScheme.primary, size: 18),
                                     const SizedBox(width: 6),
-                                    Text('Lesson Fee: \$$tutoringRate/hour', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                    Text(l10n.lessonFeePerHour(tutoringRate), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                                   ],
                                 ),
                                 SizedBox(height: sectionSpacing),
@@ -1034,7 +1042,7 @@ class ProfileDetailScreen extends StatelessWidget {
                                   Icon(Icons.family_restroom, color: Theme.of(context).colorScheme.secondary, size: 18),
                                   const SizedBox(width: 6),
                                   Text(
-                                    parentParticipationWelcomed ? 'Parent participation welcomed' : 'Parent participation not specified',
+                                    parentParticipationWelcomed ? l10n.parentParticipationWelcomed : l10n.parentParticipationNotSpecified,
                                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85)),
                                   ),
                                 ],
@@ -1043,7 +1051,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             ],
                             // I want to learn (Student)
                             if (userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
-                              Text('I want to learn', style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
+                              Text(l10n.iWantToLearn, style: TextStyle(fontSize: sectionTitleFontSize - 1, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 8,
@@ -1059,7 +1067,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // About me (내 프로필이 아니거나 My Details가 없을 때)
                   if ((!isMyProfile || onEditPressed == null) && aboutMe != null && aboutMe.isNotEmpty) ...[
                     Text(
-                      'About me',
+                      l10n.aboutMe,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1079,7 +1087,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // Tutor/Stutor: About the lesson (About me 다음) — My Details 카드가 있을 때는 카드 내에 이미 표시됨
                   if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && experienceDescription != null && experienceDescription.isNotEmpty) ...[
                     Text(
-                      'About the lesson',
+                      l10n.aboutTheLesson,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1099,7 +1107,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // Tutor/Twiner: I can teach (talents). Purple = my goal ↔ their talent (I'm Student or Twiner).
                   if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && talents != null && talents.isNotEmpty) ...[
                     Text(
-                      'I can teach',
+                      l10n.iCanTeach,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1131,7 +1139,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // Twiner 전용: I want to learn (goals). 내 프로필이면 카드에서 이미 표시하므로 여기서는 제외.
                   if ((!isMyProfile || onEditPressed == null) && userType == 'twiner' && twinerGoals != null && twinerGoals.isNotEmpty) ...[
                     Text(
-                      'I want to learn',
+                      l10n.iWantToLearn,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1163,7 +1171,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // Lesson location (Trainer only)
                   if ((!isMyProfile || onEditPressed == null) && (userType == 'tutor' || userType == 'twiner') && teachingMethods != null && teachingMethods.isNotEmpty) ...[
                     Text(
-                      'Lesson location',
+                      l10n.lessonLocation,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1175,9 +1183,9 @@ class ProfileDetailScreen extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         if (teachingMethods.contains('onsite'))
-                          _buildProfileChip(context, 'Onsite', highlighted: false),
+                          _buildProfileChip(context, l10n.onsite, highlighted: false),
                         if (teachingMethods.contains('online'))
-                          _buildProfileChip(context, 'Online', highlighted: false),
+                          _buildProfileChip(context, l10n.online, highlighted: false),
                       ],
                     ),
                     SizedBox(height: sectionSpacing),
@@ -1190,7 +1198,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         children: [
                           Icon(Icons.attach_money, color: Theme.of(context).colorScheme.primary, size: 18),
                           const SizedBox(width: 6),
-                          Text('Lesson Fee: \$$tutoringRate/hour', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                          Text(l10n.lessonFeePerHour(tutoringRate), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                         ],
                       ),
                       SizedBox(height: sectionSpacing),
@@ -1200,7 +1208,7 @@ class ProfileDetailScreen extends StatelessWidget {
                         Icon(Icons.family_restroom, color: Theme.of(context).colorScheme.secondary, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          parentParticipationWelcomed ? 'Parent participation welcomed' : 'Parent participation not specified',
+                          parentParticipationWelcomed ? l10n.parentParticipationWelcomed : l10n.parentParticipationNotSpecified,
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.85)),
                         ),
                       ],
@@ -1211,7 +1219,7 @@ class ProfileDetailScreen extends StatelessWidget {
                   // Student 전용: I want to learn (goals). Mint = my talent ↔ their goal (I'm Tutor or Twiner).
                   if ((!isMyProfile || onEditPressed == null) && userType == 'student' && traineeGoals != null && traineeGoals.isNotEmpty) ...[
                     Text(
-                      'I want to learn',
+                      l10n.iWantToLearn,
                       style: TextStyle(
                         fontSize: sectionTitleFontSize,
                         fontWeight: FontWeight.bold,
@@ -1305,21 +1313,21 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Request Training',
+                    AppLocalizations.of(context)!.requestTraining,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Select the skill and method you want to learn',
+                    AppLocalizations.of(context)!.selectSkillAndMethod,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
                   
                   // What to learn (skill chips – 테마 대비로 가독성 확보)
                   Text(
-                    'What to learn',
+                    AppLocalizations.of(context)!.whatToLearn,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1363,7 +1371,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                   
                   // Lesson Location (method chips)
                   Text(
-                    'Lesson Location',
+                    AppLocalizations.of(context)!.lessonLocation,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1375,7 +1383,8 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                     children: widget.availableMethods.map((method) {
                       final isSelected = _selectedMethod == method;
                       final scheme = Theme.of(context).colorScheme;
-                      final label = method == 'onsite' ? 'Onsite' : 'Online';
+                      final l10n = AppLocalizations.of(context)!;
+                      final label = method == 'onsite' ? l10n.onsite : l10n.online;
                       return FilterChip(
                         label: Text(
                           label,
@@ -1415,7 +1424,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Send Request'),
+                          : Text(AppLocalizations.of(context)!.sendRequest),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -1455,7 +1464,7 @@ class _RequestTrainModalState extends State<_RequestTrainModal> {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text('Failed to send request: $e'),
+          content: Text(AppLocalizations.of(context)!.failedToSendRequest(e.toString())),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1563,15 +1572,19 @@ String _sheetFormatAgeRange(int? age, String? createdAt) {
   return '${ageRange}s';
 }
 
-String _sheetGenderLabel(String? gender) {
+String _sheetGenderLabel(BuildContext context, String? gender) {
   if (gender == null) return '';
-  final g = gender.trim();
-  if (g.isEmpty || g == 'Prefer not to say') return '';
+  final g = gender.trim().toLowerCase();
+  if (g.isEmpty || g == 'prefer not to say') return '';
+  final l10n = AppLocalizations.of(context)!;
   switch (g) {
-    case 'man': return 'Man';
-    case 'woman': return 'Woman';
-    case 'non-binary': return 'Non-binary';
-    default: return g;
+    case 'man':
+    case 'male': return l10n.man;
+    case 'woman':
+    case 'female': return l10n.woman;
+    case 'non-binary':
+    case 'nonbinary': return l10n.nonBinary;
+    default: return gender.trim();
   }
 }
 
@@ -1711,15 +1724,16 @@ class _ProfileSheetBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = profile['name'] as String? ?? 'Unknown';
+    final l10n = AppLocalizations.of(context)!;
+    final name = profile['name'] as String? ?? l10n.unknownName;
     final age = profile['age'] as int?;
     final gender = profile['gender'] as String?;
     final createdAt = profile['created_at'] as String?;
     final distanceMeters = (profile['distance_meters'] as num?)?.toDouble() ??
         _sheetDistanceMeters(profile, currentUserProfile);
-    final distanceStr = distanceMeters != null ? formatDistanceMeters(distanceMeters) : null;
+    final distanceStr = distanceMeters != null ? formatDistanceMeters(context, distanceMeters) : null;
     final ageStr = _sheetFormatAgeRange(age, createdAt);
-    final genderStr = _sheetGenderLabel(gender);
+    final genderStr = _sheetGenderLabel(context, gender);
     // 내 프로필 topbar에는 아바타·뱃지·이름만 (거리·나이대·성별 제거)
     final subParts = <String>[
       if (!isMyProfile && distanceStr != null && distanceStr.isNotEmpty) distanceStr,

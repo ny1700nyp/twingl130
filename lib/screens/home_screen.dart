@@ -6,6 +6,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import '../services/supabase_service.dart';
 import '../widgets/avatar_with_type_badge.dart';
@@ -187,11 +188,12 @@ class _HomeScreenState extends State<HomeScreen> {
     int tabIndex,
   ) {
     if (list.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
       final msg = tabIndex == 0
-          ? 'No tutors yet. Like from Meet Tutors or Perfect Tutors.'
+          ? l10n.noTutorsYet
           : tabIndex == 1
-              ? 'No students yet. Like from Student Candidates or chat.'
-              : 'No fellows yet. Like from Fellow tutors in the area.';
+              ? l10n.noStudentsYet
+              : l10n.noFellowsYet;
       return Padding(
         padding: const EdgeInsets.only(top: 24),
         child: Center(
@@ -242,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       hideActionButtons: false,
                       hideDistance: true,
                     ),
-            onLongPress: userId.isEmpty ? null : () => _showFavoriteItemMenu(context, name: name?.isNotEmpty == true ? name! : 'Unknown', otherUserId: userId),
+            onLongPress: userId.isEmpty ? null : () => _showFavoriteItemMenu(context, name: name?.isNotEmpty == true ? name! : AppLocalizations.of(context)!.unknownName, otherUserId: userId),
           );
         },
       ),
@@ -271,12 +273,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
+              title: Text(AppLocalizations.of(ctx)!.delete),
               onTap: () => Navigator.of(ctx).pop('delete'),
             ),
             ListTile(
               leading: const Icon(Icons.block),
-              title: const Text('Block'),
+              title: Text(AppLocalizations.of(ctx)!.block),
               onTap: () => Navigator.of(ctx).pop('block'),
             ),
           ],
@@ -287,14 +289,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (choice == 'delete') {
       final confirm = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Remove from Favorite'),
-          content: const Text('Remove this person from your Liked list?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
-          ],
-        ),
+        builder: (ctx) {
+          final l10n = AppLocalizations.of(ctx)!;
+          return AlertDialog(
+            title: Text(l10n.removeFromFavoriteTitle),
+            content: Text(l10n.removeFromFavoriteConfirmMessage),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.cancel)),
+              TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l10n.delete)),
+            ],
+          );
+        },
       );
       if (confirm == true && context.mounted) {
         _removeUserFromFavoriteCaches(otherUserId);
@@ -303,16 +308,17 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (choice == 'block') {
       final confirm = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Block'),
-          content: const Text(
-            'Block this user? You will not see lesson requests from them.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Block')),
-          ],
-        ),
+        builder: (ctx) {
+          final l10n = AppLocalizations.of(ctx)!;
+          return AlertDialog(
+            title: Text(l10n.block),
+            content: Text(l10n.blockUserConfirmMessage),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.cancel)),
+              TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l10n.block)),
+            ],
+          );
+        },
       );
       if (confirm == true && context.mounted) {
         _removeUserFromFavoriteCaches(otherUserId);
@@ -637,13 +643,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     actions.addAll([
                       _homeActionRow(
                         icon: Icons.search,
-                        title: 'Meet Tutors in your area',
+                        title: AppLocalizations.of(context)!.meetTutorsInArea,
                         onTap: () => _openFindNearby(FindNearbySection.meetTutors),
                       ),
                       const SizedBox(height: 10),
                       _homeActionRow(
                         icon: Icons.auto_awesome_outlined,
-                        title: 'The Perfect Tutors, Anywhere',
+                        title: AppLocalizations.of(context)!.perfectTutorsAnywhere,
                         onTap: _openTalentMatch,
                       ),
                     ]);
@@ -653,13 +659,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     actions.addAll([
                       _homeActionRow(
                         icon: Icons.groups_outlined,
-                        title: 'Fellow tutors in the area',
+                        title: AppLocalizations.of(context)!.fellowTutorsInArea,
                         onTap: () => _openFindNearby(FindNearbySection.otherTrainers),
                       ),
                       const SizedBox(height: 10),
                       _homeActionRow(
                         icon: Icons.school_outlined,
-                        title: 'Student Candidates in the area',
+                        title: AppLocalizations.of(context)!.studentCandidatesInArea,
                         onTap: () => _openFindNearby(FindNearbySection.studentCandidates),
                       ),
                     ]);
@@ -668,7 +674,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     actions.add(
                       _homeActionRow(
                         icon: Icons.search,
-                        title: 'Meet Tutors in your area',
+                        title: AppLocalizations.of(context)!.meetTutorsInArea,
                         onTap: () => _openFindNearby(FindNearbySection.meetTutors),
                       ),
                     );
@@ -686,9 +692,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: const Text(
-                  'Liked',
-                  style: TextStyle(
+                child: Text(
+                  AppLocalizations.of(context)!.likedSectionTitle,
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -725,11 +731,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Row(
                               children: List.generate(visibleTabIndices.length, (i) {
                                 final logicalIndex = visibleTabIndices[i];
+                                final l10n = AppLocalizations.of(context)!;
                                 final label = logicalIndex == 0
-                                    ? 'Tutors'
+                                    ? l10n.tabTutors
                                     : logicalIndex == 1
-                                        ? 'Students'
-                                        : 'Fellows';
+                                        ? l10n.tabStudents
+                                        : l10n.tabFellows;
                                 final selected = effectiveIndex == logicalIndex;
                                 return Expanded(
                                   child: GestureDetector(

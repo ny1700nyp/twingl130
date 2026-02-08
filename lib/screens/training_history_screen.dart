@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 import 'chat_screen.dart';
 import '../utils/time_utils.dart';
@@ -271,13 +272,14 @@ class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final otherName = widget.otherProfile?['name'] as String? ?? 'Unknown';
+    final l10n = AppLocalizations.of(context)!;
+    final otherName = widget.otherProfile?['name'] as String? ?? l10n.unknownName;
     final avatarPath = widget.otherProfile?['main_photo_path'] as String?;
     final avatar = _imageProviderFromPath(avatarPath);
     
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat history with $otherName'),
+        title: Text(l10n.chatHistoryWith(otherName)),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -293,7 +295,7 @@ class _TrainingHistoryScreenState extends State<TrainingHistoryScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No chat history yet',
+                        AppLocalizations.of(context)!.noChatHistoryYet,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
                         ),

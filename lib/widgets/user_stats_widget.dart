@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 
@@ -62,10 +63,10 @@ class UserStatsWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _vanityItem(context, icon: Icons.visibility, color: Colors.blue, count: views, label: 'Views'),
+              child: _vanityItem(context, icon: Icons.visibility, color: Colors.blue, count: views, label: AppLocalizations.of(context)!.statsViews),
             ),
             Expanded(
-              child: _vanityItem(context, icon: Icons.thumb_up, color: AppTheme.twinglGreen, count: fans, label: 'Liked'),
+              child: _vanityItem(context, icon: Icons.thumb_up, color: AppTheme.twinglGreen, count: fans, label: AppLocalizations.of(context)!.statsLiked),
             ),
           ],
         ),
@@ -77,7 +78,7 @@ class UserStatsWidget extends StatelessWidget {
             Expanded(
               child: _activityColumn(
                 context,
-                header: 'Requests',
+                header: AppLocalizations.of(context)!.statsRequests,
                 accepted: inAccepted,
                 total: inTotal,
               ),
@@ -85,7 +86,7 @@ class UserStatsWidget extends StatelessWidget {
             Expanded(
               child: _activityColumn(
                 context,
-                header: 'Requesteds',
+                header: AppLocalizations.of(context)!.statsRequesteds,
                 accepted: outAccepted,
                 total: outTotal,
               ),

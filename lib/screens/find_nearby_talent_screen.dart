@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:appinio_swiper/appinio_swiper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
@@ -79,26 +80,28 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     return null;
   }
 
-  String? _lessonLocationLabel(Map<String, dynamic> p) {
+  String? _lessonLocationLabel(BuildContext context, Map<String, dynamic> p) {
+    final l10n = AppLocalizations.of(context)!;
     final raw = p['lesson_locations'] ?? p['lesson_location'] ?? p['lesson_methods'];
     final list = _stringListFromDynamic(raw).map(_norm).toList();
     if (list.isEmpty) return null;
     final hasOnline = list.contains('online');
     final hasOnsite = list.contains('onsite') || list.contains('on-site') || list.contains('inperson') || list.contains('in-person');
-    if (hasOnline && hasOnsite) return 'Online, Onsite';
-    if (hasOnline) return 'Online';
-    if (hasOnsite) return 'Onsite';
+    if (hasOnline && hasOnsite) return l10n.onlineOnsite;
+    if (hasOnline) return l10n.online;
+    if (hasOnsite) return l10n.onsite;
     return null;
   }
 
-  String? _genderLabel(Map<String, dynamic> p) {
+  String? _genderLabel(BuildContext context, Map<String, dynamic> p) {
+    final l10n = AppLocalizations.of(context)!;
     final raw = (p['gender'] as String?)?.trim();
     if (raw == null || raw.isEmpty) return null;
     final g = raw.toLowerCase();
     if (g == 'prefer not to say' || g == 'prefer_not_to_say' || g == 'unknown') return null;
-    if (g == 'man' || g == 'male') return 'Man';
-    if (g == 'woman' || g == 'female') return 'Woman';
-    if (g == 'non-binary' || g == 'nonbinary') return 'Non-binary';
+    if (g == 'man' || g == 'male') return l10n.man;
+    if (g == 'woman' || g == 'female') return l10n.woman;
+    if (g == 'non-binary' || g == 'nonbinary') return l10n.nonBinary;
     return null;
   }
 
@@ -112,14 +115,15 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     return '\$$n/hr';
   }
 
-  String get _sectionTitle {
+  String _sectionTitle(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     switch (widget.section) {
       case FindNearbySection.meetTutors:
-        return 'Meet Tutors in Your Area';
+        return l10n.meetTutorsInArea;
       case FindNearbySection.otherTrainers:
-        return 'Fellow tutors in the area';
+        return l10n.fellowTutorsInArea;
       case FindNearbySection.studentCandidates:
-        return 'Student Candidates in the area';
+        return l10n.studentCandidatesInArea;
     }
   }
 
@@ -335,7 +339,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.failedToSave(e.toString()))),
       );
     }
   }
@@ -398,14 +402,14 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'No more nearby results',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                Text(
+                  AppLocalizations.of(context)!.noMoreNearbyResults,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Tap refresh to search again.',
+                  AppLocalizations.of(context)!.tapRefreshToSearchAgain,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
                     fontWeight: FontWeight.w500,
@@ -418,7 +422,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                   child: FilledButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh'),
+                    label: Text(AppLocalizations.of(context)!.refresh),
                   ),
                 ),
               ],
@@ -432,7 +436,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_sectionTitle)),
+      appBar: AppBar(title: Text(_sectionTitle(context))),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -442,7 +446,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'No nearby talent found.',
+                          AppLocalizations.of(context)!.noNearbyTalentFound,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                           ),
@@ -451,7 +455,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
                         FilledButton.icon(
                           onPressed: _load,
                           icon: const Icon(Icons.refresh),
-                          label: const Text('Refresh'),
+                          label: Text(AppLocalizations.of(context)!.refresh),
                         ),
                       ],
                     ),
@@ -517,16 +521,17 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
             'myGoals=$_myKeywordsNorm targetTalents=${SupabaseService.getProfileTalents(p)}');
       }
     }
-    final name = p['name'] as String? ?? 'Unknown';
+    final l10n = AppLocalizations.of(context)!;
+    final name = p['name'] as String? ?? l10n.unknownName;
     final talents = widget.section == FindNearbySection.studentCandidates
         ? SupabaseService.getProfileGoals(p)
         : _stringListFromDynamic(p['talents']);
 
     final distMeters = (p['distance_meters'] as num?)?.toDouble();
-    final distanceLabel = distMeters == null ? null : formatDistanceMeters(distMeters);
+    final distanceLabel = distMeters == null ? null : formatDistanceMeters(context, distMeters);
     final ageRangeLabel = _ageRangeLabel(p);
-    final genderLabel = _genderLabel(p);
-    final methodLabel = _lessonLocationLabel(p);
+    final genderLabel = _genderLabel(context, p);
+    final methodLabel = _lessonLocationLabel(context, p);
     final rateLabel = _rateLabel(p);
 
     final photoPath = _pickMainPhoto(p);
@@ -636,8 +641,8 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
               const SizedBox(height: 12),
               Text(
                 widget.section == FindNearbySection.studentCandidates
-                    ? 'I want to learn'
-                    : 'I can teach',
+                    ? l10n.iWantToLearn
+                    : l10n.iCanTeach,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -676,7 +681,7 @@ class _FindNearbyTalentScreenState extends State<FindNearbyTalentScreen> {
             if (widget.section != FindNearbySection.studentCandidates) ...[
               const SizedBox(height: 14),
               Text(
-                'Tutoring rate',
+                l10n.tutoringRate,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),

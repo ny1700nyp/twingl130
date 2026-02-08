@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 import '../widgets/avatar_with_type_badge.dart';
 
@@ -23,36 +24,39 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   final Set<String> _selectedIds = {};
   final Map<String, ImageProvider?> _avatarCache = {};
 
-  String get _title {
+  String _title(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     switch (widget.mode) {
       case UserManagementMode.deleteFromLiked:
-        return 'Delete User';
+        return l10n.deleteUser;
       case UserManagementMode.block:
-        return 'Block User';
+        return l10n.blockUser;
       case UserManagementMode.unblock:
-        return 'Unblock User';
+        return l10n.unblockUser;
     }
   }
 
-  String get _emptyMessage {
+  String _emptyMessage(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     switch (widget.mode) {
       case UserManagementMode.deleteFromLiked:
-        return 'No liked users.';
+        return l10n.noLikedUsers;
       case UserManagementMode.block:
-        return 'No users to block from your liked list.';
+        return l10n.noUsersToBlockFromLikedList;
       case UserManagementMode.unblock:
-        return 'No blocked users.';
+        return l10n.noBlockedUsers;
     }
   }
 
-  String get _actionButtonLabel {
+  String _actionButtonLabel(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     switch (widget.mode) {
       case UserManagementMode.deleteFromLiked:
-        return 'Remove from Liked';
+        return l10n.removeFromLiked;
       case UserManagementMode.block:
-        return 'Block selected';
+        return l10n.blockSelected;
       case UserManagementMode.unblock:
-        return 'Unblock selected';
+        return l10n.unblockSelected;
     }
   }
 
@@ -116,7 +120,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _performAction() async {
     if (_selectedIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one user')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.selectAtLeastOneUser)),
       );
       return;
     }
@@ -124,28 +128,29 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
+    final l10n = AppLocalizations.of(context)!;
     final confirmMessage = switch (widget.mode) {
       UserManagementMode.deleteFromLiked =>
-        'Remove ${_selectedIds.length} user(s) from your Liked list?',
+        l10n.removeUsersFromLikedConfirm(_selectedIds.length),
       UserManagementMode.block =>
-        'Block ${_selectedIds.length} user(s)? They will not be able to send you messages.',
+        l10n.blockUsersConfirm(_selectedIds.length),
       UserManagementMode.unblock =>
-        'Unblock ${_selectedIds.length} user(s)? They will be able to message you again.',
+        l10n.unblockUsersConfirm(_selectedIds.length),
     };
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(_actionButtonLabel),
+        title: Text(_actionButtonLabel(context)),
         content: Text(confirmMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Confirm'),
+            child: Text(l10n.confirm),
           ),
         ],
       ),
@@ -183,11 +188,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     if (!mounted) return;
     if (hadError) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Some actions failed. Please try again.')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.someActionsFailed)),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${_selectedIds.length} user(s) updated')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.usersUpdated(_selectedIds.length))),
       );
       if (widget.mode == UserManagementMode.deleteFromLiked) {
         await SupabaseService.getFavoriteTrainersCached(user.id, forceRefresh: true);
@@ -205,7 +210,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_title),
+        title: Text(_title(context)),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -214,7 +219,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      _emptyMessage,
+                      _emptyMessage(context),
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                           ),
@@ -272,7 +277,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               ),
                             ),
                             child: Text(
-                              _actionButtonLabel +
+                              _actionButtonLabel(context) +
                                   (_selectedIds.isEmpty ? '' : ' (${_selectedIds.length})'),
                             ),
                           ),

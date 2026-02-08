@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../app_navigation.dart' show navigatorKey;
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/twingl_wordmark.dart';
@@ -80,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Anonymous login failed: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.anonymousLoginFailed(e.toString()))),
       );
     } finally {
       if (mounted) {
@@ -206,9 +207,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Sign in with social login',
-                style: TextStyle(
+              Text(
+                AppLocalizations.of(context)!.signInWithSocialLogin,
+                style: const TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
                 ),
@@ -216,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 48),
               _buildSocialButton(
-                label: 'Sign in with Google',
+                label: AppLocalizations.of(context)!.signInWithGoogle,
                 icon: Icons.g_mobiledata,
                 color: const Color(0xFF4285F4),
                 onPressed: () => _signInWithProvider(OAuthProvider.google),

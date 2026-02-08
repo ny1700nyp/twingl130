@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/category_service.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
@@ -96,39 +97,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Twiner 전환 플로우 전체 (Tutor→Twiner 또는 Student→Twiner)
   bool get _isTwinerConversion => _isTwinerFromTutor || _isTwinerFromStudent;
-
-  static const String _tutorWaiverTitle = 'Tutor Agreement & Liability Waiver';
-  static const String _tutorWaiverText = '''
-Professional Conduct: I certify that the information provided in my profile regarding my skills and qualifications is accurate and truthful. I agree to conduct all sessions with professionalism and respect.
-
-Independent Status: I understand that Twingl is a matching platform and I am not an employee, agent, or contractor of Twingl. I am solely responsible for my actions and the content of my sessions.
-
-Safety & Zero Tolerance: I agree to adhere to Twingl's strict safety guidelines. I understand that any form of harassment, discrimination, or inappropriate behavior will result in immediate termination of my account and potential legal action.
-
-Release of Liability: I hereby release and hold harmless Twingl, its owners, and affiliates from any and all liability, claims, or demands arising out of my participation as a tutor.
-''';
-
-  static const String _studentWaiverTitle = 'Student Assumption of Risk & Waiver';
-  static const String _studentWaiverText = '''
-Voluntary Participation: I am voluntarily participating in activities (running, learning sessions, etc.) connected through Twingl.
-
-Assumption of Risk: I understand that certain activities, particularly physical ones like running or hiking, carry inherent risks of injury. I knowingly assume all such risks, both known and unknown.
-
-Personal Responsibility: I acknowledge that Twingl does not conduct background checks on every user and I am responsible for taking necessary safety precautions when meeting others.
-
-Waiver of Claims: I waive any right to sue Twingl or its affiliates for any injury, loss, or damage associated with my participation.
-''';
-
-  static const String _parentalConsentTitle = 'Parental Consent & Guardian Release';
-  static const String _parentalConsentText = '''
-Guardian Authority: I represent that I am the parent or legal guardian of the minor registering for Twingl.
-
-Consent to Participate: I hereby give permission for my child to participate in activities and connect with other users on Twingl.
-
-Supervision & Responsibility: I understand that Twingl is an open community platform. I agree to supervise my child's use of the app and assume full responsibility for their safety and actions.
-
-Emergency Medical Treatment: In the event of an emergency during a Twingl-related activity, I authorize necessary medical treatment for my child if I cannot be reached.
-''';
 
   @override
   void initState() {
@@ -497,7 +465,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
     } catch (e) {
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick photo: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.failedToPickPhoto(e.toString()))),
       );
       return null;
     }
@@ -537,7 +505,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
   String _birthdateLabel() {
     final b = _birthdateLocal;
-    if (b == null) return 'Select birthdate';
+    if (b == null) return AppLocalizations.of(context)!.selectBirthdate;
     return DateFormat('yyyy-MM-dd').format(b);
   }
 
@@ -581,58 +549,59 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       _isTwinerFromStudent ? true : (_isTwinerFromTutor ? false : _isTutor);
 
   bool _validateStepKey(_OnboardingStepKey key) {
+    final l10n = AppLocalizations.of(context)!;
     switch (key) {
       case _OnboardingStepKey.basic:
         if ((_nameController.text.trim()).isEmpty) {
-          _snack('Name is required.');
+          _snack(l10n.nameRequired);
           return false;
         }
         if (_birthdateLocal == null) {
-          _snack('Birthdate is required.');
+          _snack(l10n.birthdateRequired);
           return false;
         }
         return true;
       case _OnboardingStepKey.topics:
         if (_talentsOrGoals.isEmpty) {
-          _snack('Please select at least 1 topic.');
+          _snack(l10n.selectAtLeastOneTopic);
           return false;
         }
         return true;
       case _OnboardingStepKey.lessonInfo:
         if (_lessonLocations.isEmpty) {
-          _snack('Please select at least one lesson location (Online/Onsite).');
+          _snack(l10n.selectLessonLocation);
           return false;
         }
         final rate = _rateController.text.trim();
         if (rate.isEmpty) {
-          _snack('Tutoring rate per hour is required.');
+          _snack(l10n.tutoringRateRequired);
           return false;
         }
-        if (int.tryParse(rate) == null) {
-          _snack('Tutoring rate must be a number.');
+        if (double.tryParse(rate) == null) {
+          _snack(l10n.tutoringRateMustBeNumber);
           return false;
         }
         return true;
       case _OnboardingStepKey.goals:
         if (_goalsForTwiner.isEmpty) {
-          _snack('Please select at least 1 topic for what you want to learn.');
+          _snack(l10n.selectAtLeastOneTopicToLearn);
           return false;
         }
         return true;
       case _OnboardingStepKey.photos:
         if (_profilePhotos.isEmpty) {
-          _snack('Please select 1 profile photo (required).');
+          _snack(l10n.selectOneProfilePhoto);
           return false;
         }
         return true;
       case _OnboardingStepKey.waivers:
         if (_isEdit && !_isTwinerConversion) return true;
         if (!_agreeRoleWaiver) {
-          _snack(_showTutorWaiverInStep ? 'Please agree to the Tutor waiver.' : 'Please agree to the Student waiver.');
+          _snack(_showTutorWaiverInStep ? l10n.pleaseAgreeToTutorWaiver : l10n.pleaseAgreeToStudentWaiver);
           return false;
         }
         if (_requiresParentalConsent && !_agreeParentalConsent) {
-          _snack('Parental consent is required for minors.');
+          _snack(l10n.parentalConsentRequiredForMinors);
           return false;
         }
         return true;
@@ -659,7 +628,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      _snack('You are not logged in.');
+      _snack(AppLocalizations.of(context)!.notLoggedIn);
       return;
     }
 
@@ -792,7 +761,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
       }
     } catch (e) {
       if (!mounted) return;
-      _snack('Failed to save profile: $e');
+      _snack(AppLocalizations.of(context)!.failedToSaveProfile(e.toString()));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -821,12 +790,12 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   _profilePhotos.add(one);
                 });
               },
-              child: const Column(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate_outlined, size: 40),
-                  SizedBox(height: 8),
-                  Text('Add photo'),
+                  const Icon(Icons.add_photo_alternate_outlined, size: 40),
+                  const SizedBox(height: 8),
+                  Text(AppLocalizations.of(context)!.addPhoto),
                 ],
               ),
             ),
@@ -889,6 +858,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
   }
 
   List<Step> _buildSteps() {
+    final l10n = AppLocalizations.of(context)!;
     final keys = _stepKeys();
     final steps = <Step>[];
 
@@ -902,7 +872,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
           final disabledFill = Theme.of(context).colorScheme.surfaceContainerHighest;
           steps.add(
             Step(
-              title: const Text('Role & Basic info'),
+              title: Text(l10n.roleAndBasicInfo),
               isActive: isActive,
               state: state,
               content: Column(
@@ -918,20 +888,20 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                       ),
                       child: Row(
                         children: [
-                          const Expanded(
-                            child: Text('Demo mode: random data is filled (photos skipped).'),
+                          Expanded(
+                            child: Text(l10n.demoModeRandomData),
                           ),
                           TextButton(
                             onPressed: _isSaving ? null : () => _prefillDummyOnboardingData(regenerate: true),
-                            child: const Text('Regenerate'),
+                            child: Text(l10n.regenerate),
                           ),
                         ],
                       ),
                     ),
                   SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'tutor', label: Text('Tutor')),
-                      ButtonSegment(value: 'student', label: Text('Student')),
+                    segments: [
+                      ButtonSegment(value: 'tutor', label: Text(l10n.tutor)),
+                      ButtonSegment(value: 'student', label: Text(l10n.student)),
                     ],
                     selected: {_userType},
                     onSelectionChanged: _isEdit
@@ -961,7 +931,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     controller: _nameController,
                     enabled: !_isEdit,
                     decoration: InputDecoration(
-                      labelText: 'Name',
+                      labelText: l10n.name,
                       border: const OutlineInputBorder(),
                       filled: _isEdit,
                       fillColor: _isEdit ? disabledFill : null,
@@ -971,16 +941,16 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   DropdownButtonFormField<String>(
                     initialValue: _gender,
                     decoration: InputDecoration(
-                      labelText: 'Gender',
+                      labelText: l10n.gender,
                       border: const OutlineInputBorder(),
                       filled: _isEdit,
                       fillColor: _isEdit ? disabledFill : null,
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'man', child: Text('Man')),
-                      DropdownMenuItem(value: 'woman', child: Text('Woman')),
-                      DropdownMenuItem(value: 'non-binary', child: Text('Non-binary')),
-                      DropdownMenuItem(value: 'Prefer not to say', child: Text('Prefer not to say')),
+                    items: [
+                      DropdownMenuItem(value: 'man', child: Text(l10n.man)),
+                      DropdownMenuItem(value: 'woman', child: Text(l10n.woman)),
+                      DropdownMenuItem(value: 'non-binary', child: Text(l10n.nonBinary)),
+                      DropdownMenuItem(value: 'Prefer not to say', child: Text(l10n.preferNotToSay)),
                     ],
                     onChanged: _isEdit ? null : (v) => setState(() => _gender = v ?? 'Prefer not to say'),
                   ),
@@ -989,7 +959,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     onTap: (_isSaving || _isEdit) ? null : _pickBirthdate,
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'Birthdate',
+                        labelText: l10n.birthdate,
                         border: const OutlineInputBorder(),
                         filled: _isEdit,
                         fillColor: _isEdit ? disabledFill : null,
@@ -1014,19 +984,19 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   const SizedBox(height: 8),
                   if (_birthdateLocal != null)
                     Text(
-                      'Age: ${_computedAge() ?? ''}',
+                      AppLocalizations.of(context)!.ageLabel((_computedAge() ?? '').toString()),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                           ),
                     ),
                   const SizedBox(height: 16),
-                  _sectionTitle('About me (optional)'),
+                  _sectionTitle(l10n.aboutMeOptional),
                   TextField(
                     controller: _aboutMeController,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Tell others about you…',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: l10n.tellOthersAboutYou,
                     ),
                   ),
                 ],
@@ -1037,8 +1007,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
         case _OnboardingStepKey.topics:
           final topicsLabel = _isTwinerFromTutor
-              ? 'What do you want to learn?'
-              : (_isTwinerFromStudent ? 'What can you teach?' : (_isTutor ? 'What can you teach?' : 'What do you want to learn?'));
+              ? l10n.whatDoYouWantToLearn
+              : (_isTwinerFromStudent ? l10n.whatCanYouTeach : (_isTutor ? l10n.whatCanYouTeach : l10n.whatDoYouWantToLearn));
           steps.add(
             Step(
               title: Text(topicsLabel),
@@ -1051,7 +1021,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     selectedItems: _talentsOrGoals,
                     onSelectionChanged: (v) => setState(() => _talentsOrGoals = v),
                     title: topicsLabel,
-                    hint: 'Select 1–6.',
+                    hint: l10n.selectTopicsHint,
                   ),
                 ],
               ),
@@ -1062,30 +1032,30 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         case _OnboardingStepKey.lessonInfo:
           steps.add(
             Step(
-              title: const Text('Lesson info'),
+              title: Text(l10n.lessonInfo),
               isActive: isActive,
               state: state,
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _sectionTitle('About the lesson (optional)'),
+                  _sectionTitle(l10n.aboutTheLessonOptional),
                   TextField(
                     controller: _aboutLessonController,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Share lesson details, expectations, goals…',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: l10n.shareLessonDetails,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _sectionTitle('Lesson Location (required)'),
+                  _sectionTitle(l10n.lessonLocationRequired),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       FilterChip(
                         label: Text(
-                          'Onsite',
+                          l10n.onsite,
                           style: TextStyle(
                             color: _lessonLocations.contains('onsite')
                                 ? Theme.of(context).colorScheme.onPrimary
@@ -1110,7 +1080,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                       ),
                       FilterChip(
                         label: Text(
-                          'Online',
+                          l10n.online,
                           style: TextStyle(
                             color: _lessonLocations.contains('online')
                                 ? Theme.of(context).colorScheme.onPrimary
@@ -1136,7 +1106,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _sectionTitle('Tutoring Rate per Hour (required)'),
+                  _sectionTitle(l10n.tutoringRatePerHourRequired),
                   TextField(
                     controller: _rateController,
                     keyboardType: TextInputType.number,
@@ -1150,7 +1120,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   CheckboxListTile(
                     value: _parentParticipationWelcomed,
                     onChanged: (v) => setState(() => _parentParticipationWelcomed = v ?? false),
-                    title: const Text('Parent participation welcomed (optional)'),
+                    title: Text(l10n.parentParticipationOptional),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -1163,7 +1133,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         case _OnboardingStepKey.goals:
           steps.add(
             Step(
-              title: const Text('What do you want to learn?'),
+              title: Text(l10n.whatDoYouWantToLearn),
               isActive: isActive,
               state: state,
               content: Column(
@@ -1172,8 +1142,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   CategorySelectorWidget(
                     selectedItems: _goalsForTwiner,
                     onSelectionChanged: (v) => setState(() => _goalsForTwiner = v),
-                    title: 'What do you want to learn?',
-                    hint: 'Select 1–6.',
+                    title: l10n.whatDoYouWantToLearn,
+                    hint: l10n.selectTopicsHint,
                   ),
                 ],
               ),
@@ -1184,13 +1154,13 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         case _OnboardingStepKey.photos:
           steps.add(
             Step(
-              title: const Text('Profile photo'),
+              title: Text(l10n.profilePhoto),
               isActive: isActive,
               state: state,
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _sectionTitle('Profile photo (required)'),
+                  _sectionTitle(l10n.profilePhotoRequired),
                   _singlePhotoPicker(),
                 ],
               ),
@@ -1201,21 +1171,21 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
         case _OnboardingStepKey.waivers:
           steps.add(
             Step(
-              title: const Text('Waivers'),
+              title: Text(l10n.waivers),
               isActive: isActive,
               state: state,
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Required before finishing.',
+                    l10n.waiversRequiredBeforeFinishing,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                         ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _showTutorWaiverInStep ? _tutorWaiverTitle : _studentWaiverTitle,
+                    _showTutorWaiverInStep ? l10n.tutorWaiverTitle : l10n.studentWaiverTitle,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 10),
@@ -1235,8 +1205,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                               ?.copyWith(height: 1.4),
                           children: AppTheme.textSpansWithTwinglHighlight(
                             _showTutorWaiverInStep
-                                ? _tutorWaiverText
-                                : _studentWaiverText,
+                                ? l10n.tutorWaiverText
+                                : l10n.studentWaiverText,
                             baseStyle: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -1253,8 +1223,8 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     onChanged: (v) => setState(() => _agreeRoleWaiver = v ?? false),
                     title: Text(
                       _showTutorWaiverInStep
-                          ? 'I have read and agree to the Tutor Agreement & Liability Waiver'
-                          : 'I have read and agree to the Student Assumption of Risk & Waiver',
+                          ? l10n.agreeToTutorWaiverCheckbox
+                          : l10n.agreeToStudentWaiverCheckbox,
                     ),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
@@ -1262,7 +1232,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   const SizedBox(height: 10),
                   if (_requiresParentalConsent) ...[
                     Text(
-                      _parentalConsentTitle,
+                      l10n.parentalConsentTitle,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
@@ -1283,7 +1253,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                                 .bodyMedium
                                 ?.copyWith(height: 1.4),
                             children: AppTheme.textSpansWithTwinglHighlight(
-                              _parentalConsentText,
+                              l10n.parentalConsentText,
                               baseStyle: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
@@ -1298,13 +1268,13 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                     CheckboxListTile(
                       value: _agreeParentalConsent,
                       onChanged: (v) => setState(() => _agreeParentalConsent = v ?? false),
-                      title: const Text('I have read and agree to the Parental Consent & Guardian Release'),
+                      title: Text(l10n.agreeToParentalConsentCheckbox),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
                   ] else ...[
                     Text(
-                      'Parental consent is only required for minors (under 18).',
+                      l10n.parentalConsentOnlyForMinors,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                           ),
@@ -1330,7 +1300,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isTwinerConversion ? 'Adding more info' : (_isEdit ? 'Edit Profile' : 'Onboarding')),
+        title: Text(_isTwinerConversion ? AppLocalizations.of(context)!.addingMoreInfo : (_isEdit ? AppLocalizations.of(context)!.editProfile : AppLocalizations.of(context)!.onboardingTitle)),
       ),
       body: SafeArea(
         child: Stepper(
@@ -1375,7 +1345,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                   Expanded(
                     child: OutlinedButton(
                       onPressed: canGoBack ? details.onStepCancel : null,
-                      child: const Text('Back'),
+                      child: Text(AppLocalizations.of(context)!.back),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1388,7 +1358,7 @@ Emergency Medical Treatment: In the event of an emergency during a Twingl-relate
                               width: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(isLast ? (_isEdit ? 'Save' : 'Finish') : 'Next'),
+                          : Text(isLast ? (_isEdit ? AppLocalizations.of(context)!.save : AppLocalizations.of(context)!.finish) : AppLocalizations.of(context)!.next),
                     ),
                   ),
                 ],

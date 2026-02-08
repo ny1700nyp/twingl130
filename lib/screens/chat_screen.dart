@@ -9,6 +9,7 @@ import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/distance_formatter.dart';
@@ -324,7 +325,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          'How do I pay for lessons?',
+                          AppLocalizations.of(context)!.howDoIPayForLessons,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: Colors.white.withAlpha(250),
@@ -379,7 +380,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
           child: Text(
-            'Chat is only available after the other person accepts your first class request. Please wait.',
+            AppLocalizations.of(context)!.chatOnlyAfterAccept,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: Colors.white.withAlpha(250),
@@ -421,7 +422,7 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Your request was declined. Please feel free to send a new request when you\'re ready.',
+                AppLocalizations.of(context)!.requestDeclinedMessage,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: Colors.white.withAlpha(250),
@@ -429,7 +430,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'You might also consider finding another tutor.',
+                AppLocalizations.of(context)!.considerAnotherTutor,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w500,
                   color: Colors.white.withAlpha(230),
@@ -456,19 +457,18 @@ class _ChatScreenState extends State<ChatScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Twingl connects you with neighbors, but we don\'t handle payments directly. '
-          'This keeps our service free and puts 100% of the fee in your tutor\'s pocket!',
+          AppLocalizations.of(context)!.paymentIntro,
           style: style,
         ),
         const SizedBox(height: 12),
-        Text('Please agree on a method that works for both of you, such as:', style: style),
+        Text(AppLocalizations.of(context)!.paymentAgreeMethod, style: style),
         const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(Icons.smartphone, size: _paymentGuideIconSize, color: iconColor),
             const SizedBox(width: 6),
-            Expanded(child: Text('Venmo / Zelle / PayPal', style: style)),
+            Expanded(child: Text(AppLocalizations.of(context)!.paymentVenmoZellePaypal, style: style)),
           ],
         ),
         const SizedBox(height: 4),
@@ -477,7 +477,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Icon(Icons.attach_money, size: _paymentGuideIconSize, color: iconColor),
             const SizedBox(width: 6),
-            Expanded(child: Text('Cash', style: style)),
+            Expanded(child: Text(AppLocalizations.of(context)!.paymentCash, style: style)),
           ],
         ),
         const SizedBox(height: 4),
@@ -486,12 +486,12 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Icon(Icons.coffee, size: _paymentGuideIconSize, color: iconColor),
             const SizedBox(width: 6),
-            Expanded(child: Text('Coffee or Meal (for casual sessions)', style: style)),
+            Expanded(child: Text(AppLocalizations.of(context)!.paymentCoffeeOrMeal, style: style)),
           ],
         ),
         const SizedBox(height: 12),
         Text(
-          'Note: For safety, we recommend paying after meeting in person.',
+          AppLocalizations.of(context)!.paymentNoteSafety,
           style: style,
         ),
         const SizedBox(height: 12),
@@ -502,7 +502,7 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Tip: For online lessons, consider paying via PayPal for buyer protection, or use the 50/50 payment method.',
+                AppLocalizations.of(context)!.paymentTipOnline,
                 style: style,
               ),
             ),
@@ -521,7 +521,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'Unread',
+              AppLocalizations.of(context)!.unread,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w600,
@@ -618,7 +618,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send proposal: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.failedToSendProposal(e.toString()))),
         );
       }
     } finally {
@@ -679,7 +679,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (kDebugMode) debugPrint('[chat] sendMessage DB insert FAILED: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.failedToSend(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -709,14 +709,14 @@ class _ChatScreenState extends State<ChatScreen> {
       await SupabaseService.sendMessage(
         conversationId: widget.conversationId,
         senderId: currentUser.id,
-        messageText: 'Accepted. You can chat now.',
+        messageText: AppLocalizations.of(context)!.acceptedChatNow,
         type: 'system',
         metadata: const <String, dynamic>{'kind': 'request_accepted'},
       );
       await SupabaseService.sendMessage(
         conversationId: widget.conversationId,
         senderId: currentUser.id,
-        messageText: 'Please discuss your availability, preferred location, and rates to kick things off.',
+        messageText: AppLocalizations.of(context)!.schedulePromptMessage,
         type: 'system',
         metadata: const <String, dynamic>{'kind': 'schedule_prompt'},
       );
@@ -726,7 +726,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _conversation = conv ?? _conversation);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to accept: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.failedToAccept(e.toString()))));
     }
   }
 
@@ -751,16 +751,16 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Decline reason', style: Theme.of(context).textTheme.titleMedium),
+              Text(AppLocalizations.of(context)!.declineReason, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
                 autofocus: true,
                 minLines: 2,
                 maxLines: 6,
-                decoration: const InputDecoration(
-                  hintText: 'Why are you declining?',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: AppLocalizations.of(context)!.whyDecliningHint,
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -769,7 +769,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(AppLocalizations.of(context)!.cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -780,7 +780,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         if (text.isEmpty) return;
                         Navigator.of(context).pop(text);
                       },
-                      child: const Text('Send'),
+                      child: Text(AppLocalizations.of(context)!.send),
                     ),
                   ),
                 ],
@@ -799,7 +799,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await SupabaseService.sendMessage(
         conversationId: widget.conversationId,
         senderId: currentUser.id,
-        messageText: 'Declined: $trimmed',
+        messageText: AppLocalizations.of(context)!.declinedWithReason(trimmed),
         type: 'system',
         metadata: <String, dynamic>{
           'kind': 'decline_reason',
@@ -809,10 +809,10 @@ class _ChatScreenState extends State<ChatScreen> {
       final conv = await SupabaseService.getConversation(widget.conversationId);
       if (!mounted) return;
       setState(() => _conversation = conv);
-      parentMessenger.showSnackBar(const SnackBar(content: Text('Declined')));
+      parentMessenger.showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.declined)));
     } catch (e) {
       if (!mounted) return;
-      parentMessenger.showSnackBar(SnackBar(content: Text('Failed to decline: $e')));
+      parentMessenger.showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.failedToDecline(e.toString()))));
     }
   }
 
@@ -833,11 +833,11 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           Expanded(
-            child: OutlinedButton(onPressed: _declineRequest, child: const Text('Decline')),
+            child: OutlinedButton(onPressed: _declineRequest, child: Text(AppLocalizations.of(context)!.decline)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: ElevatedButton(onPressed: _acceptRequest, child: const Text('Accept')),
+            child: ElevatedButton(onPressed: _acceptRequest, child: Text(AppLocalizations.of(context)!.accept)),
           ),
         ],
       ),
@@ -932,6 +932,21 @@ class _ChatScreenState extends State<ChatScreen> {
     const declinedMessageGradient = [AppTheme.secondaryGold, Color(0xFFDC2626)];
     final isDeclineReason = isSystem && kind == 'decline_reason';
 
+    // Localize bubble text for system/request/decline messages so they show in current locale
+    final l10n = AppLocalizations.of(context)!;
+    String displayText = text;
+    if (isDeclineReason && metaMap != null) {
+      final reason = (metaMap['reason'] as String?)?.trim() ?? '';
+      displayText = l10n.declinedWithReason(reason);
+    } else if (type == 'request' && text.isNotEmpty) {
+      final afterPrefix = text.replaceFirst(RegExp(r'^Request:\s*', caseSensitive: false), '').trim();
+      displayText = afterPrefix.isEmpty ? text : '${l10n.request}: $afterPrefix';
+    } else if (isSystem && kind == 'request_accepted') {
+      displayText = l10n.acceptedChatNow;
+    } else if (isSystem && kind == 'schedule_prompt') {
+      displayText = l10n.schedulePromptMessage;
+    }
+
     final currentUserId = currentUser?.id;
     final traineeId = _conversation?['trainee_id'] as String?;
     final isRequestSender = currentUserId != null && currentUserId == traineeId;
@@ -1002,7 +1017,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             : null,
                       ),
                       child: Text(
-                        text,
+                        displayText,
                         style: TextStyle(
                           color: (quoteGradient != null || isDeclineReason)
                               ? Colors.white.withAlpha(250)
@@ -1031,7 +1046,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (type == 'request')
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text('Request', style: Theme.of(context).textTheme.bodySmall),
+                  child: Text(AppLocalizations.of(context)!.request, style: Theme.of(context).textTheme.bodySmall),
                 ),
             ],
           ),
@@ -1117,13 +1132,13 @@ class _ChatScreenState extends State<ChatScreen> {
                           return Center(
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: Text('Failed to load profile: ${snap.error}'),
+                              child: Text(AppLocalizations.of(context)!.failedToLoadProfile(snap.error.toString())),
                             ),
                           );
                         }
                         final profile = snap.data;
                         if (profile == null) {
-                          return const Center(child: Text('Profile not found'));
+                          return Center(child: Text(AppLocalizations.of(context)!.profileNotFound));
                         }
 
                         final p = Map<String, dynamic>.from(profile);
@@ -1132,10 +1147,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           p['distance_meters'] = meters;
                         }
 
-                        final name = p['name'] as String? ?? 'Unknown';
+                        final name = p['name'] as String? ?? AppLocalizations.of(context)!.unknownName;
                         final age = p['age'] as int?;
                         final gender = p['gender'] as String?;
-                        final distanceStr = meters != null ? formatDistanceMeters(meters) : null;
+                        final distanceStr = meters != null ? formatDistanceMeters(context, meters) : null;
                         final ageStr = _sheetAgeRange(age, p['created_at'] as String?);
                         final genderStr = _sheetGenderLabel(gender);
                         final subParts = <String>[
@@ -1175,7 +1190,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   if (subParts.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      subParts.join('  â€¢  '),
+                                      subParts.join(' \u2022 '),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
@@ -1211,7 +1226,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         }
                                         if (ctx.mounted) {
                                           ScaffoldMessenger.of(ctx).showSnackBar(
-                                            const SnackBar(content: Text('Added to Liked')),
+                                            SnackBar(content: Text(AppLocalizations.of(context)!.addedToLiked)),
                                           );
                                         }
                                       }
@@ -1290,7 +1305,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final otherName = (widget.otherProfile?['name'] as String?) ?? 'Chat';
+    final otherName = (widget.otherProfile?['name'] as String?) ?? AppLocalizations.of(context)!.chat;
     final status = _conversationStatus();
     final chatEnabled = status == 'accepted';
     final showPending = status == 'pending';
@@ -1436,10 +1451,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       enabled: chatEnabled,
                       decoration: InputDecoration(
                         hintText: showPending
-                            ? 'Waiting for Accept'
+                            ? AppLocalizations.of(context)!.waitingForAccept
                             : showDeclined
-                                ? 'Declined'
-                                : 'Message...',
+                                ? AppLocalizations.of(context)!.declinedStatus
+                                : AppLocalizations.of(context)!.messageHint,
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -1564,7 +1579,7 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
           crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Scheduling',
+            AppLocalizations.of(context)!.scheduling,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
@@ -1603,9 +1618,9 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
           TextField(
             controller: _locationController,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Location',
-              hintText: 'e.g. Santa Teresa Library, Zoom',
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.locationLabel,
+              hintText: AppLocalizations.of(context)!.locationHint,
               border: OutlineInputBorder(),
             ),
           ),
@@ -1626,7 +1641,7 @@ class _ProposeLessonSheetContentState extends State<_ProposeLessonSheetContent> 
               });
               // onSend calls Navigator.pop(data), closing the sheet
             },
-            child: const Text('Send Proposal'),
+            child: Text(AppLocalizations.of(context)!.sendProposal),
           ),
         ],
         ),
