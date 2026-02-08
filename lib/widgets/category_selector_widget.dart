@@ -4,6 +4,8 @@ import '../models/category_model.dart';
 import '../services/category_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// selectedItems는 DB/매칭용 canonical key 목록. 표시는 CategoryService.getDisplayLabel 또는 카테고리 로드 결과의 label 사용.
+
 class CategorySelectorWidget extends StatefulWidget {
   final List<String> selectedItems;
   final Function(List<String>) onSelectionChanged;
@@ -25,12 +27,17 @@ class CategorySelectorWidget extends StatefulWidget {
 class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
   List<CategoryItem> _categories = [];
   bool _isLoading = true;
+  String? _loadedLocaleCode;
   final TextEditingController _customItemController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _loadCategories();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final localeCode = Localizations.localeOf(context).languageCode;
+    if (_loadedLocaleCode != localeCode) {
+      _loadedLocaleCode = localeCode;
+      _loadCategories();
+    }
   }
 
   @override
@@ -41,7 +48,8 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
 
   Future<void> _loadCategories() async {
     try {
-      final categories = await CategoryService.loadCategories();
+      final locale = Localizations.localeOf(context);
+      final categories = await CategoryService.loadCategories(locale);
       setState(() {
         _categories = categories;
         _isLoading = false;
@@ -54,12 +62,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
     }
   }
 
-  void _toggleItem(String item) {
+  void _toggleItem(String key) {
     final newSelection = List<String>.from(widget.selectedItems);
-    if (newSelection.contains(item)) {
-      newSelection.remove(item);
+    if (newSelection.contains(key)) {
+      newSelection.remove(key);
     } else {
-      // 최대 6개까지만 선택 가능
       if (newSelection.length >= 6) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -69,9 +76,22 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         );
         return;
       }
-      newSelection.add(item);
+      newSelection.add(key);
     }
     widget.onSelectionChanged(newSelection);
+  }
+
+  /// 현재 로드된 카테고리에서 key → 표시 문자열 맵 (선택 칩 표시용)
+  Map<String, String> get _keyToLabel {
+    final map = <String, String>{};
+    for (final c in _categories) {
+      for (final sub in c.subItems) {
+        for (final entry in sub.items) {
+          map[entry.key] = entry.label;
+        }
+      }
+    }
+    return map;
   }
 
   Future<void> _showCustomItemDialog() async {
@@ -250,18 +270,19 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: widget.selectedItems.map((item) {
+            children: widget.selectedItems.map((key) {
               final scheme = Theme.of(context).colorScheme;
+              final label = _keyToLabel[key] ?? CategoryService.getDisplayLabel(key, Localizations.localeOf(context));
               return Chip(
                 backgroundColor: scheme.surfaceContainerHighest,
                 label: Text(
-                  item,
+                  label,
                   style: TextStyle(
                     color: scheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                onDeleted: () => _toggleItem(item),
+                onDeleted: () => _toggleItem(key),
                 deleteIcon: Icon(
                   Icons.close,
                   size: 18,
@@ -377,16 +398,15 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: subItem.items.map((item) {
-              final isSelected = widget.selectedItems.contains(item);
+            children: subItem.items.map((entry) {
+              final isSelected = widget.selectedItems.contains(entry.key);
               final scheme = Theme.of(context).colorScheme;
 
               return FilterChip(
                 label: Text(
-                  item,
+                  entry.label,
                   style: TextStyle(
                     fontSize: 12,
-                    // Always set explicit label color so it stays readable in light/dark mode.
                     color: isSelected ? scheme.onPrimary : scheme.onSurface,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                   ),
@@ -394,7 +414,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 selected: isSelected,
                 onSelected: (selected) {
                   setState(() {
-                    _toggleItem(item);
+                    _toggleItem(entry.key);
                   });
                 },
                 backgroundColor: scheme.surfaceContainerHighest,

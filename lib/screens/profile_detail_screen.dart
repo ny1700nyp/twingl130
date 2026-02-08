@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../services/category_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/distance_formatter.dart';
 import '../widgets/avatar_with_type_badge.dart';
@@ -996,7 +997,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: talents.map((t) => _buildProfileChip(context, t.toString(), highlighted: false, chipBorderColor: AppTheme.twinglPurple)).toList(),
+                                children: talents.map((t) => _buildProfileChip(context, CategoryService.getDisplayLabel(t.toString(), Localizations.localeOf(context)), highlighted: false, chipBorderColor: AppTheme.twinglPurple)).toList(),
                               ),
                               SizedBox(height: sectionSpacing),
                             ],
@@ -1007,7 +1008,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: twinerGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
+                                children: twinerGoals.map((g) => _buildProfileChip(context, CategoryService.getDisplayLabel(g.toString(), Localizations.localeOf(context)), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
                               ),
                               SizedBox(height: sectionSpacing),
                             ],
@@ -1056,7 +1057,7 @@ class ProfileDetailScreen extends StatelessWidget {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
-                                children: traineeGoals.map((g) => _buildProfileChip(context, g.toString(), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
+                                children: traineeGoals.map((g) => _buildProfileChip(context, CategoryService.getDisplayLabel(g.toString(), Localizations.localeOf(context)), highlighted: false, chipBorderColor: AppTheme.twinglMint)).toList(),
                               ),
                             ],
                       ],
@@ -1125,7 +1126,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             final highlighted = isMatchPurple && !isMyProfile;
                             return _buildProfileChip(
                               context,
-                              talentStr,
+                              CategoryService.getDisplayLabel(talentStr, Localizations.localeOf(context)),
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglPurple : null,
                               chipBorderColor: AppTheme.twinglPurple,
@@ -1157,7 +1158,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             final highlighted = isMatchMint && !isMyProfile;
                             return _buildProfileChip(
                               context,
-                              goalStr,
+                              CategoryService.getDisplayLabel(goalStr, Localizations.localeOf(context)),
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglMint : null,
                               chipBorderColor: AppTheme.twinglMint,
@@ -1237,7 +1238,7 @@ class ProfileDetailScreen extends StatelessWidget {
                             final highlighted = isMatchMint && !isMyProfile;
                             return _buildProfileChip(
                               context,
-                              goalStr,
+                              CategoryService.getDisplayLabel(goalStr, Localizations.localeOf(context)),
                               highlighted: highlighted,
                               highlightColor: highlighted ? AppTheme.twinglMint : null,
                               chipBorderColor: AppTheme.twinglMint,

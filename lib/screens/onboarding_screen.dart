@@ -340,15 +340,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  /// DB 저장/매칭용 canonical key 목록 (로케일 무관)
   Future<List<String>> _loadAllCategoryItemsFlat() async {
-    final categories = await CategoryService.loadCategories();
-    final out = <String>[];
-    for (final c in categories) {
-      for (final sub in c.subItems) {
-        out.addAll(sub.items);
-      }
-    }
-    return out.where((e) => e.trim().isNotEmpty).toList();
+    final locale = Localizations.localeOf(context);
+    final categories = await CategoryService.loadCategories(locale);
+    return CategoryService.getAllKeysFlat(categories);
   }
 
   List<String> _pickRandomUnique(List<String> items, int count) {

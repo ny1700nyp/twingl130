@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RadiusHubData>
+  <Category name="Music & Audio" icon="music_note">
+    <SubCategory name="String Instruments">
+      <Item>Guitar</Item>
+      <Item>Bass Guitar</Item>
+      <Item>Violin</Item>
+      <Item>Viola</Item>
+      <Item>Cello</Item>
+      <Item>Contrabass (Double Bass)</Item>
+      <Item>Ukulele</Item>
+      <Item>Harp</Item>
+    </SubCategory>
+    <SubCategory name="Keyboard Instruments">
+      <Item>Piano</Item>
+      <Item>Keyboard</Item>
+      <Item>Organ</Item>
+      <Item>Accordion</Item>
+    </SubCategory>
+    <SubCategory name="Wind & Brass Instruments">
+      <Item>Flute</Item>
+      <Item>Clarinet</Item>
+      <Item>Oboe</Item>
+      <Item>Bassoon</Item>
+      <Item>Saxophone</Item>
+      <Item>Trumpet</Item>
+      <Item>Trombone</Item>
+      <Item>Horn</Item>
+      <Item>Tuba</Item>
+      <Item>Recorder</Item>
+      <Item>Ocarina</Item>
+      <Item>Pan Flute</Item>
+      <Item>Harmonica</Item>
+    </SubCategory>
+    <SubCategory name="Percussion & Others">
+      <Item>Drum</Item>
+      <Item>Percussion</Item>
+      <Item>Kalimba</Item>
+      <Item>Handpan</Item>
+    </SubCategory>
+    <SubCategory name="Vocals">
+      <Item>Vocal/Singing</Item>
+      <Item>Opera</Item>
+      <Item>Rap</Item>
+      <Item>Beatbox</Item>
+      <Item>Voice Acting</Item>
+    </SubCategory>
+    <SubCategory name="Theory & Production">
+      <Item>Composition/Arrangement</Item>
+      <Item>Songwriting (Lyrics)</Item>
+      <Item>MIDI/Computer Composition</Item>
+      <Item>Sound/Recording</Item>
+      <Item>Harmony (Music Theory)</Item>
+      <Item>Conducting</Item>
+      <Item>DJing</Item>
+    </SubCategory>
+    <SubCategory name="Genre Specialty">
+      <Item>K-Pop</Item>
+      <Item>J-Pop</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Sports & Fitness" icon="directions_run">
+    <SubCategory name="Fitness & Wellness">
+      <Item>Personal Training (PT)</Item>
+      <Item>Pilates</Item>
+      <Item>Yoga</Item>
+      <Item>Crossfit</Item>
+      <Item>Aerobics</Item>
+      <Item>Jump Rope</Item>
+      <Item>Nutrition/Diet Management</Item>
+      <Item>Sports Instruction</Item>
+      <Item>Exercise Physiology</Item>
+    </SubCategory>
+    <SubCategory name="Ball Sports">
+      <Item>Football</Item>
+      <Item>Soccer</Item>
+      <Item>Basketball</Item>
+      <Item>Baseball</Item>
+      <Item>Tennis</Item>
+      <Item>Golf</Item>
+      <Item>Volleyball</Item>
+      <Item>Badminton</Item>
+      <Item>Table Tennis</Item>
+      <Item>Bowling</Item>
+      <Item>Billiards/Pool</Item>
+      <Item>Squash/Racquetball</Item>
+      <Item>Hockey</Item>
+      <Item>Bocce</Item>
+      <Item>Foot Volleyball (Jokgu)</Item>
+      <Item>Pickleball</Item>
+    </SubCategory>
+    <SubCategory name="Water Sports">
+      <Item>Swimming</Item>
+      <Item>Surfing</Item>
+      <Item>Scuba Diving</Item>
+      <Item>Freediving</Item>
+      <Item>Snorkeling</Item>
+      <Item>Wakeboard</Item>
+      <Item>Water Ski</Item>
+      <Item>Paddleboard (SUP)</Item>
+      <Item>Canoe</Item>
+      <Item>Kayak</Item>
+      <Item>Yacht/Sailing</Item>
+    </SubCategory>
+    <SubCategory name="Outdoor & Extreme (Land/Snow)">
+      <Item>Marathon/Running</Item>
+      <Item>Track & Field</Item>
+      <Item>Cycling/Bicycle</Item>
+      <Item>Skateboarding</Item>
+      <Item>Inline Skate</Item>
+      <Item>Climbing/Bouldering</Item>
+      <Item>Horse Riding</Item>
+      <Item>Archery</Item>
+      <Item>Shooting</Item>
+      <Item>Gymnastics</Item>
+      <Item>Snowboard</Item>
+      <Item>Skiing</Item>
+      <Item>Ice Skating</Item>
+    </SubCategory>
+    <SubCategory name="Martial Arts & Self-Defense">
+      <Item>Boxing</Item>
+      <Item>Kickboxing</Item>
+      <Item>Muay Thai</Item>
+      <Item>MMA</Item>
+      <Item>JiuJitsu</Item>
+      <Item>Judo</Item>
+      <Item>Taekwondo</Item>
+      <Item>Karate</Item>
+      <Item>Kung Fu</Item>
+      <Item>Hapkido</Item>
+      <Item>Kendo</Item>
+      <Item>Fencing</Item>
+      <Item>Self-Defense</Item>
+      <Item>Parkour</Item>
+      <Item>Nunchaku</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Arts & Crafts" icon="palette">
+    <SubCategory name="Fine Arts & Drawing">
+      <Item>Digital Drawing</Item>
+      <Item>Sketching/Drawing</Item>
+      <Item>Painting (Fine Art)</Item>
+      <Item>Oriental Painting</Item>
+      <Item>Pop Art</Item>
+      <Item>Sculpture</Item>
+      <Item>Webtoon</Item>
+      <Item>Comics</Item>
+      <Item>Anime</Item>
+      <Item>Kids Art</Item>
+    </SubCategory>
+    <SubCategory name="Textile & Fabric Crafts">
+      <Item>Knitting</Item>
+      <Item>Crochet</Item>
+      <Item>Sewing</Item>
+      <Item>Sewing Machine</Item>
+      <Item>Embroidery</Item>
+      <Item>Macrame</Item>
+      <Item>Felt Craft</Item>
+      <Item>Ribbon Craft</Item>
+    </SubCategory>
+    <SubCategory name="Scent & Beauty Crafts">
+      <Item>Candle Craft</Item>
+      <Item>Plaster/Gypsum Craft</Item>
+      <Item>Diffuser</Item>
+      <Item>Perfume Making</Item>
+      <Item>Natural Soap</Item>
+      <Item>Cosmetics Making</Item>
+    </SubCategory>
+    <SubCategory name="Material Crafts (Wood/Metal/Clay)">
+      <Item>Woodworking</Item>
+      <Item>Metal Craft</Item>
+      <Item>Leather Craft</Item>
+      <Item>Pottery/Ceramics</Item>
+      <Item>Glass Art</Item>
+      <Item>Resin Art</Item>
+      <Item>Rattan Craft</Item>
+      <Item>Furniture Making</Item>
+      <Item>Jewelry/Accessory Making</Item>
+      <Item>Clay Art</Item>
+    </SubCategory>
+    <SubCategory name="Paper & Decor Crafts">
+      <Item>Origami</Item>
+      <Item>Paper Art/Folding</Item>
+      <Item>Calligraphy</Item>
+      <Item>Flower Arrangement</Item>
+      <Item>Florist</Item>
+      <Item>Balloon Art</Item>
+      <Item>Knot Craft</Item>
+      <Item>Miniature</Item>
+      <Item>Napkin Art</Item>
+      <Item>Folk Art</Item>
+      <Item>Gift Wrapping</Item>
+      <Item>Sand Art</Item>
+      <Item>Neon Craft</Item>
+      <Item>String Art</Item>
+    </SubCategory>
+    <SubCategory name="Media & Photography">
+      <Item>Photography Shooting</Item>
+      <Item>Photo Editing</Item>
+      <Item>Video Shooting</Item>
+      <Item>Video Editing</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Dance & Performance" icon="theater_comedy">
+    <SubCategory name="Dance Styles">
+      <Item>Ballet</Item>
+      <Item>Contemporary</Item>
+      <Item>Jazz</Item>
+      <Item>Tap</Item>
+      <Item>Modern</Item>
+      <Item>Salsa</Item>
+      <Item>Bachata</Item>
+      <Item>Tango</Item>
+      <Item>Swing Dance</Item>
+      <Item>Dance Sports (Ballroom)</Item>
+      <Item>Zumba</Item>
+      <Item>Urban</Item>
+      <Item>Pole Dance</Item>
+      <Item>Belly Dance</Item>
+      <Item>Hula Dance</Item>
+      <Item>Flamenco</Item>
+      <Item>K-Pop</Item>
+      <Item>J-Pop</Item>
+    </SubCategory>
+    <SubCategory name="Performance Arts">
+      <Item>Acting</Item>
+      <Item>Musical Theater</Item>
+      <Item>Directing</Item>
+      <Item>Magic</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Food & Drink" icon="restaurant">
+    <SubCategory name="Culinary Arts">
+      <Item>Cooking</Item>
+      <Item>Baking</Item>
+      <Item>Food Carving</Item>
+    </SubCategory>
+    <SubCategory name="Beverage">
+      <Item>Coffee/Barista</Item>
+      <Item>Tea</Item>
+      <Item>Wine</Item>
+      <Item>Whiskey</Item>
+      <Item>Beer</Item>
+      <Item>Cocktail/Mixology</Item>
+    </SubCategory>
+    <SubCategory name="Dessert">
+      <Item>Chocolate/Chocolatier</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Academic Tutoring" icon="school">
+    <SubCategory name="Mathematics">
+      <Item>Algebra I</Item>
+      <Item>Geometry</Item>
+      <Item>Algebra II / Trigonometry</Item>
+      <Item>Pre-Calculus</Item>
+      <Item>Calculus</Item>
+      <Item>Statistics</Item>
+      <Item>Integrated Math I, II, III</Item>
+      <Item>Business Math / Financial Algebra</Item>
+    </SubCategory>
+    <SubCategory name="Science">
+      <Item>Biology</Item>
+      <Item>Chemistry</Item>
+      <Item>Physics</Item>
+      <Item>Environmental Science</Item>
+      <Item>Anatomy & Physiology</Item>
+      <Item>Marine Biology</Item>
+    </SubCategory>
+    <SubCategory name="English & Language Arts">
+      <Item>English I, II, III, IV</Item>
+      <Item>American Literature</Item>
+      <Item>British Literature</Item>
+      <Item>Creative Writing</Item>
+      <Item>Journalism</Item>
+      <Item>Speech & Debate</Item>
+      <Item>Essay Writing</Item>
+    </SubCategory>
+    <SubCategory name="Social Studies & History">
+      <Item>World History</Item>
+      <Item>U.S. History</Item>
+      <Item>U.S. Government / Civics</Item>
+      <Item>Economics</Item>
+      <Item>Psychology</Item>
+      <Item>Sociology</Item>
+    </SubCategory>
+    <SubCategory name="World Languages">
+      <Item>Spanish</Item>
+      <Item>French</Item>
+      <Item>Chinese (Mandarin)</Item>
+      <Item>Japanese</Item>
+      <Item>Korean</Item>
+      <Item>Latin</Item>
+      <Item>Vietnamese</Item>
+      <Item>German</Item>
+      <Item>ASL (American Sign Language)</Item>
+      <Item>Sign Language (General)</Item>
+    </SubCategory>
+    <SubCategory name="AP (Advanced Placement)">
+      <Item>Calculus AB/BC</Item>
+      <Item>Statistics</Item>
+      <Item>Biology</Item>
+      <Item>Chemistry</Item>
+      <Item>Physics</Item>
+      <Item>English Language</Item>
+      <Item>English Literature</Item>
+      <Item>US History</Item>
+      <Item>World History</Item>
+      <Item>Psychology</Item>
+      <Item>Computer Science A</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Career & Lifestyle" icon="work">
+    <SubCategory name="Career Development">
+      <Item>Resume/CV</Item>
+      <Item>Interview Prep</Item>
+      <Item>Speech/Presentation</Item>
+      <Item>Portfolio</Item>
+      <Item>Career Coaching</Item>
+      <Item>Aptitude Test</Item>
+      <Item>Overseas Employment</Item>
+      <Item>Job Hunting Strategy</Item>
+    </SubCategory>
+    <SubCategory name="Tech & Skills">
+      <Item>Computer Science</Item>
+      <Item>Coding (Python/Java etc.)</Item>
+      <Item>Engineering</Item>
+      <Item>Robotics</Item>
+      <Item>CAD Design</Item>
+      <Item>Marketing</Item>
+      <Item>Entrepreneurship</Item>
+      <Item>Personal Finance</Item>
+      <Item>Auto Mechanics</Item>
+      <Item>AI (Artificial Intelligence)</Item>
+      <Item>ML (Machine Learning)</Item>
+    </SubCategory>
+    <SubCategory name="Style & Beauty">
+      <Item>Beauty/Makeup</Item>
+      <Item>Fashion Design</Item>
+      <Item>Modeling</Item>
+      <Item>Personal Shopper</Item>
+      <Item>Tattoo Art</Item>
+      <Item>K-Beauty</Item>
+    </SubCategory>
+    <SubCategory name="Games & Hobbies">
+      <Item>Chess</Item>
+      <Item>Go (Baduk)</Item>
+      <Item>Korean Chess (Janggi)</Item>
+      <Item>Poker</Item>
+      <Item>Board Games</Item>
+      <Item>Writing</Item>
+      <Item>Handwriting Correction</Item>
+      <Item>Fishing</Item>
+      <Item>Drone</Item>
+      <Item>Darts</Item>
+      <Item>Juggling</Item>
+    </SubCategory>
+    <SubCategory name="Home & Life">
+      <Item>Gardening/Farming</Item>
+      <Item>Interior Design</Item>
+      <Item>Organizing/Decluttering</Item>
+      <Item>Eastern Astrology/Saju</Item>
+      <Item>DIY Home Repair</Item>
+      <Item>Tarot Cards</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="Kids & Early Education" icon="child_care">
+    <SubCategory name="Reading & Phonics">
+      <Item>Storytelling (Read Aloud)</Item>
+      <Item>Sight Words Games</Item>
+      <Item>Phonics</Item>
+      <Item>Reading Support (Dyslexia)</Item>
+      <Item>Vocabulary Games</Item>
+    </SubCategory>
+    <SubCategory name="Fun Math">
+      <Item>Board Game Math (Add/Sub)</Item>
+      <Item>Money Concepts (Market Play)</Item>
+      <Item>Multiplication Songs</Item>
+      <Item>Number Sense</Item>
+    </SubCategory>
+    <SubCategory name="Handwriting">
+      <Item>Pencil Grip Correction</Item>
+      <Item>Cursive Writing</Item>
+      <Item>Print Writing Practice</Item>
+    </SubCategory>
+    <SubCategory name="Creativity & Sensory Play">
+      <Item>Messy & Sensory</Item>
+      <Item>Kids Art</Item>
+      <Item>Kids Music</Item>
+    </SubCategory>
+    <SubCategory name="Active Kids">
+      <Item>Bike</Item>
+      <Item>Inline</Item>
+      <Item>Scooter</Item>
+      <Item>Jump Rope Tricks</Item>
+      <Item>Soccer</Item>
+      <Item>T-Ball</Item>
+      <Item>Basketball</Item>
+      <Item>Ballet</Item>
+      <Item>K-Pop</Item>
+      <Item>Kids Yoga</Item>
+      <Item>Meditation</Item>
+      <Item>Creative Movement</Item>
+    </SubCategory>
+    <SubCategory name="STEM & Logic">
+      <Item>Lego</Item>
+      <Item>Block Coding (Scratch Jr.)</Item>
+      <Item>Robot Building</Item>
+      <Item>Simple Science Experiments</Item>
+      <Item>Chess</Item>
+      <Item>Rubik's Cube</Item>
+      <Item>Checkers</Item>
+      <Item>Board Game</Item>
+    </SubCategory>
+    <SubCategory name="Playdate in Language">
+      <Item>Korean</Item>
+      <Item>Spanish</Item>
+      <Item>Chinese</Item>
+      <Item>Vietnamese</Item>
+      <Item>German</Item>
+      <Item>English</Item>
+      <Item>Hindi</Item>
+      <Item>Telugu</Item>
+      <Item>Tamil</Item>
+    </SubCategory>
+    <SubCategory name="Culture">
+      <Item>Dumpling Making</Item>
+      <Item>Taco Making</Item>
+      <Item>Holiday Crafts</Item>
+    </SubCategory>
+    <SubCategory name="Social & Special Needs">
+      <Item>Social Role Play</Item>
+      <Item>Emotional Regulation & Expression</Item>
+      <Item>Making Friends</Item>
+    </SubCategory>
+    <SubCategory name="Support">
+      <Item>Homework</Item>
+      <Item>Shadowing</Item>
+    </SubCategory>
+  </Category>
+</RadiusHubData>

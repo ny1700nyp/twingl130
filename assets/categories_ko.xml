@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RadiusHubData>
+  <Category name="음악 및 오디오" icon="music_note">
+    <SubCategory name="현악기">
+      <Item key="Guitar">기타</Item>
+      <Item key="Bass Guitar">베이스 기타</Item>
+      <Item key="Violin">바이올린</Item>
+      <Item key="Viola">비올라</Item>
+      <Item key="Cello">첼로</Item>
+      <Item key="Contrabass (Double Bass)">콘트라베이스</Item>
+      <Item key="Ukulele">우쿨렐레</Item>
+      <Item key="Harp">하프</Item>
+    </SubCategory>
+    <SubCategory name="건반 악기">
+      <Item key="Piano">피아노</Item>
+      <Item key="Keyboard">키보드</Item>
+      <Item key="Organ">오르간</Item>
+      <Item key="Accordion">아코디언</Item>
+    </SubCategory>
+    <SubCategory name="관악기 및 금관악기">
+      <Item key="Flute">플루트</Item>
+      <Item key="Clarinet">클라리넷</Item>
+      <Item key="Oboe">오보에</Item>
+      <Item key="Bassoon">바순</Item>
+      <Item key="Saxophone">색소폰</Item>
+      <Item key="Trumpet">트럼펫</Item>
+      <Item key="Trombone">트롬본</Item>
+      <Item key="Horn">호른</Item>
+      <Item key="Tuba">튜바</Item>
+      <Item key="Recorder">리코더</Item>
+      <Item key="Ocarina">오카리나</Item>
+      <Item key="Pan Flute">팬플루트</Item>
+      <Item key="Harmonica">하모니카</Item>
+    </SubCategory>
+    <SubCategory name="타악기 및 기타">
+      <Item key="Drum">드럼</Item>
+      <Item key="Percussion">타악기</Item>
+      <Item key="Kalimba">칼림바</Item>
+      <Item key="Handpan">핸드팬</Item>
+    </SubCategory>
+    <SubCategory name="보컬">
+      <Item key="Vocal/Singing">보컬/노래</Item>
+      <Item key="Opera">오페라</Item>
+      <Item key="Rap">랩</Item>
+      <Item key="Beatbox">비트박스</Item>
+      <Item key="Voice Acting">성우</Item>
+    </SubCategory>
+    <SubCategory name="이론 및 제작">
+      <Item key="Composition/Arrangement">작곡/편곡</Item>
+      <Item key="Songwriting (Lyrics)">작사</Item>
+      <Item key="MIDI/Computer Composition">MIDI/컴퓨터 작곡</Item>
+      <Item key="Sound/Recording">사운드/녹음</Item>
+      <Item key="Harmony (Music Theory)">화성학(음악 이론)</Item>
+      <Item key="Conducting">지휘</Item>
+      <Item key="DJing">DJ</Item>
+    </SubCategory>
+    <SubCategory name="장르 특화">
+      <Item key="K-Pop">K-Pop</Item>
+      <Item key="J-Pop">J-Pop</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="스포츠 및 피트니스" icon="directions_run">
+    <SubCategory name="피트니스 및 웰니스">
+      <Item key="Personal Training (PT)">개인 트레이닝(PT)</Item>
+      <Item key="Pilates">필라테스</Item>
+      <Item key="Yoga">요가</Item>
+      <Item key="Crossfit">크로스핏</Item>
+      <Item key="Aerobics">에어로빅</Item>
+      <Item key="Jump Rope">줄넘기</Item>
+      <Item key="Nutrition/Diet Management">영양/식이 관리</Item>
+      <Item key="Sports Instruction">스포츠 지도</Item>
+      <Item key="Exercise Physiology">운동 생리학</Item>
+    </SubCategory>
+    <SubCategory name="구기 스포츠">
+      <Item key="Football">미식축구</Item>
+      <Item key="Soccer">축구</Item>
+      <Item key="Basketball">농구</Item>
+      <Item key="Baseball">야구</Item>
+      <Item key="Tennis">테니스</Item>
+      <Item key="Golf">골프</Item>
+      <Item key="Volleyball">배구</Item>
+      <Item key="Badminton">배드민턴</Item>
+      <Item key="Table Tennis">탁구</Item>
+      <Item key="Bowling">볼링</Item>
+      <Item key="Billiards/Pool">당구</Item>
+      <Item key="Squash/Racquetball">스쿼시/라켓볼</Item>
+      <Item key="Hockey">하키</Item>
+      <Item key="Bocce">보치아</Item>
+      <Item key="Foot Volleyball (Jokgu)">족구</Item>
+      <Item key="Pickleball">픽블볼</Item>
+    </SubCategory>
+    <SubCategory name="수상 스포츠">
+      <Item key="Swimming">수영</Item>
+      <Item key="Surfing">서핑</Item>
+      <Item key="Scuba Diving">스쿠버다이빙</Item>
+      <Item key="Freediving">프리다이빙</Item>
+      <Item key="Snorkeling">스노클링</Item>
+      <Item key="Wakeboard">웨이크보드</Item>
+      <Item key="Water Ski">수상스키</Item>
+      <Item key="Paddleboard (SUP)">패들보드(SUP)</Item>
+      <Item key="Canoe">카누</Item>
+      <Item key="Kayak">카약</Item>
+      <Item key="Yacht/Sailing">요트/세일링</Item>
+    </SubCategory>
+    <SubCategory name="아웃도어 및 익스트림(육상/스노우)">
+      <Item key="Marathon/Running">마라톤/러닝</Item>
+      <Item key="Track &amp; Field">육상</Item>
+      <Item key="Cycling/Bicycle">사이클링/자전거</Item>
+      <Item key="Skateboarding">스케이트보드</Item>
+      <Item key="Inline Skate">인라인스케이트</Item>
+      <Item key="Climbing/Bouldering">클라이밍/볼더링</Item>
+      <Item key="Horse Riding">승마</Item>
+      <Item key="Archery">양궁</Item>
+      <Item key="Shooting">사격</Item>
+      <Item key="Gymnastics">체조</Item>
+      <Item key="Snowboard">스노보드</Item>
+      <Item key="Skiing">스키</Item>
+      <Item key="Ice Skating">아이스스케이팅</Item>
+    </SubCategory>
+    <SubCategory name="무술 및 자기방어">
+      <Item key="Boxing">복싱</Item>
+      <Item key="Kickboxing">킥복싱</Item>
+      <Item key="Muay Thai">무에타이</Item>
+      <Item key="MMA">MMA</Item>
+      <Item key="JiuJitsu">주짓수</Item>
+      <Item key="Judo">유도</Item>
+      <Item key="Taekwondo">태권도</Item>
+      <Item key="Karate">가라테</Item>
+      <Item key="Kung Fu">쿵푸</Item>
+      <Item key="Hapkido">합기도</Item>
+      <Item key="Kendo">검도</Item>
+      <Item key="Fencing">펜싱</Item>
+      <Item key="Self-Defense">자기방어</Item>
+      <Item key="Parkour">파쿠르</Item>
+      <Item key="Nunchaku">쌍절곤</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="미술 및 공예" icon="palette">
+    <SubCategory name="미술 및 드로잉">
+      <Item key="Digital Drawing">디지털 드로잉</Item>
+      <Item key="Sketching/Drawing">스케치/드로잉</Item>
+      <Item key="Painting (Fine Art)">회화(미술)</Item>
+      <Item key="Oriental Painting">동양화</Item>
+      <Item key="Pop Art">팝아트</Item>
+      <Item key="Sculpture">조소</Item>
+      <Item key="Webtoon">웹툰</Item>
+      <Item key="Comics">만화</Item>
+      <Item key="Anime">애니메이션</Item>
+      <Item key="Kids Art">키즈 아트</Item>
+    </SubCategory>
+    <SubCategory name="섬유 및 직물 공예">
+      <Item key="Knitting">니트</Item>
+      <Item key="Crochet">크로셰</Item>
+      <Item key="Sewing">재봉</Item>
+      <Item key="Sewing Machine">재봉틀</Item>
+      <Item key="Embroidery">자수</Item>
+      <Item key="Macrame">매크라메</Item>
+      <Item key="Felt Craft">펠트 공예</Item>
+      <Item key="Ribbon Craft">리본 공예</Item>
+    </SubCategory>
+    <SubCategory name="향 및 뷰티 공예">
+      <Item key="Candle Craft">캔들 공예</Item>
+      <Item key="Plaster/Gypsum Craft">석고 공예</Item>
+      <Item key="Diffuser">디퓨저</Item>
+      <Item key="Perfume Making">향수 만들기</Item>
+      <Item key="Natural Soap">천연 비누</Item>
+      <Item key="Cosmetics Making">화장품 만들기</Item>
+    </SubCategory>
+    <SubCategory name="소재 공예(목재/금속/점토)">
+      <Item key="Woodworking">목공</Item>
+      <Item key="Metal Craft">금속 공예</Item>
+      <Item key="Leather Craft">가죽 공예</Item>
+      <Item key="Pottery/Ceramics">도자기/세라믹</Item>
+      <Item key="Glass Art">유리 공예</Item>
+      <Item key="Resin Art">레진 아트</Item>
+      <Item key="Rattan Craft">등나무 공예</Item>
+      <Item key="Furniture Making">가구 제작</Item>
+      <Item key="Jewelry/Accessory Making">주얼리/액세서리 만들기</Item>
+      <Item key="Clay Art">클레이 아트</Item>
+    </SubCategory>
+    <SubCategory name="종이 및 데코 공예">
+      <Item key="Origami">오리가미</Item>
+      <Item key="Paper Art/Folding">종이 공예/접기</Item>
+      <Item key="Calligraphy">캘리그라피</Item>
+      <Item key="Flower Arrangement">꽃꽂이</Item>
+      <Item key="Florist">플로리스트</Item>
+      <Item key="Balloon Art">풍선 아트</Item>
+      <Item key="Knot Craft">매듭 공예</Item>
+      <Item key="Miniature">미니어처</Item>
+      <Item key="Napkin Art">냅킨 아트</Item>
+      <Item key="Folk Art">민속 공예</Item>
+      <Item key="Gift Wrapping">선물 포장</Item>
+      <Item key="Sand Art">샌드 아트</Item>
+      <Item key="Neon Craft">네온 공예</Item>
+      <Item key="String Art">실 공예</Item>
+    </SubCategory>
+    <SubCategory name="미디어 및 사진">
+      <Item key="Photography Shooting">사진 촬영</Item>
+      <Item key="Photo Editing">사진 편집</Item>
+      <Item key="Video Shooting">영상 촬영</Item>
+      <Item key="Video Editing">영상 편집</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="댄스 및 공연" icon="theater_comedy">
+    <SubCategory name="댄스 스타일">
+      <Item key="Ballet">발레</Item>
+      <Item key="Contemporary">컨템포러리</Item>
+      <Item key="Jazz">재즈</Item>
+      <Item key="Tap">탭댄스</Item>
+      <Item key="Modern">모던</Item>
+      <Item key="Salsa">살사</Item>
+      <Item key="Bachata">바차타</Item>
+      <Item key="Tango">탱고</Item>
+      <Item key="Swing Dance">스윙댄스</Item>
+      <Item key="Dance Sports (Ballroom)">댄스스포츠(볼룸)</Item>
+      <Item key="Zumba">줌바</Item>
+      <Item key="Urban">어반</Item>
+      <Item key="Pole Dance">폴댄스</Item>
+      <Item key="Belly Dance">벨리댄스</Item>
+      <Item key="Hula Dance">훌라댄스</Item>
+      <Item key="Flamenco">플라멩코</Item>
+      <Item key="K-Pop">K-Pop</Item>
+      <Item key="J-Pop">J-Pop</Item>
+    </SubCategory>
+    <SubCategory name="공연 예술">
+      <Item key="Acting">연기</Item>
+      <Item key="Musical Theater">뮤지컬</Item>
+      <Item key="Directing">연출</Item>
+      <Item key="Magic">마술</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="음식 및 음료" icon="restaurant">
+    <SubCategory name="요리">
+      <Item key="Cooking">요리</Item>
+      <Item key="Baking">베이킹</Item>
+      <Item key="Food Carving">푸드 카빙</Item>
+    </SubCategory>
+    <SubCategory name="음료">
+      <Item key="Coffee/Barista">커피/바리스타</Item>
+      <Item key="Tea">차</Item>
+      <Item key="Wine">와인</Item>
+      <Item key="Whiskey">위스키</Item>
+      <Item key="Beer">맥주</Item>
+      <Item key="Cocktail/Mixology">칵테일/믹서놀로지</Item>
+    </SubCategory>
+    <SubCategory name="디저트">
+      <Item key="Chocolate/Chocolatier">초콜릿/쇼콜라티에</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="학습 및 과외" icon="school">
+    <SubCategory name="수학">
+      <Item key="Algebra I">대수 I</Item>
+      <Item key="Geometry">기하</Item>
+      <Item key="Algebra II / Trigonometry">대수 II / 삼각함수</Item>
+      <Item key="Pre-Calculus">미적분 준비</Item>
+      <Item key="Calculus">미적분</Item>
+      <Item key="Statistics">통계</Item>
+      <Item key="Integrated Math I, II, III">통합 수학 I, II, III</Item>
+      <Item key="Business Math / Financial Algebra">비즈니스 수학 / 금융 대수</Item>
+    </SubCategory>
+    <SubCategory name="과학">
+      <Item key="Biology">생물</Item>
+      <Item key="Chemistry">화학</Item>
+      <Item key="Physics">물리</Item>
+      <Item key="Environmental Science">환경 과학</Item>
+      <Item key="Anatomy &amp; Physiology">해부생리학</Item>
+      <Item key="Marine Biology">해양 생물학</Item>
+    </SubCategory>
+    <SubCategory name="영어 및 언어 예술">
+      <Item key="English I, II, III, IV">영어 I, II, III, IV</Item>
+      <Item key="American Literature">미국 문학</Item>
+      <Item key="British Literature">영국 문학</Item>
+      <Item key="Creative Writing">창작 글쓰기</Item>
+      <Item key="Journalism">저널리즘</Item>
+      <Item key="Speech &amp; Debate">스피치 및 토론</Item>
+      <Item key="Essay Writing">에세이 쓰기</Item>
+    </SubCategory>
+    <SubCategory name="사회 및 역사">
+      <Item key="World History">세계사</Item>
+      <Item key="U.S. History">미국사</Item>
+      <Item key="U.S. Government / Civics">미국 정부/시민</Item>
+      <Item key="Economics">경제학</Item>
+      <Item key="Psychology">심리학</Item>
+      <Item key="Sociology">사회학</Item>
+    </SubCategory>
+    <SubCategory name="제2외국어">
+      <Item key="Spanish">스페인어</Item>
+      <Item key="French">프랑스어</Item>
+      <Item key="Chinese (Mandarin)">중국어(만다린)</Item>
+      <Item key="Japanese">일본어</Item>
+      <Item key="Korean">한국어</Item>
+      <Item key="Latin">라틴어</Item>
+      <Item key="Vietnamese">베트남어</Item>
+      <Item key="German">독일어</Item>
+      <Item key="ASL (American Sign Language)">ASL(미국 수화)</Item>
+      <Item key="Sign Language (General)">수화(일반)</Item>
+    </SubCategory>
+    <SubCategory name="AP(대학 선이수)">
+      <Item key="Calculus AB/BC">미적분 AB/BC</Item>
+      <Item key="Statistics">통계</Item>
+      <Item key="Biology">생물</Item>
+      <Item key="Chemistry">화학</Item>
+      <Item key="Physics">물리</Item>
+      <Item key="English Language">영어 언어</Item>
+      <Item key="English Literature">영어 문학</Item>
+      <Item key="US History">미국사</Item>
+      <Item key="World History">세계사</Item>
+      <Item key="Psychology">심리학</Item>
+      <Item key="Computer Science A">컴퓨터 과학 A</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="커리어 및 라이프스타일" icon="work">
+    <SubCategory name="커리어 개발">
+      <Item key="Resume/CV">이력서/CV</Item>
+      <Item key="Interview Prep">면접 준비</Item>
+      <Item key="Speech/Presentation">스피치/발표</Item>
+      <Item key="Portfolio">포트폴리오</Item>
+      <Item key="Career Coaching">커리어 코칭</Item>
+      <Item key="Aptitude Test">적성 검사</Item>
+      <Item key="Overseas Employment">해외 취업</Item>
+      <Item key="Job Hunting Strategy">취업 전략</Item>
+    </SubCategory>
+    <SubCategory name="기술 및 스킬">
+      <Item key="Computer Science">컴퓨터 과학</Item>
+      <Item key="Coding (Python/Java etc.)">코딩(Python/Java 등)</Item>
+      <Item key="Engineering">공학</Item>
+      <Item key="Robotics">로봇공학</Item>
+      <Item key="CAD Design">CAD 디자인</Item>
+      <Item key="Marketing">마케팅</Item>
+      <Item key="Entrepreneurship">창업</Item>
+      <Item key="Personal Finance">개인 재무</Item>
+      <Item key="Auto Mechanics">자동차 정비</Item>
+      <Item key="AI (Artificial Intelligence)">AI(인공지능)</Item>
+      <Item key="ML (Machine Learning)">ML(머신러닝)</Item>
+    </SubCategory>
+    <SubCategory name="스타일 및 뷰티">
+      <Item key="Beauty/Makeup">뷰티/메이크업</Item>
+      <Item key="Fashion Design">패션 디자인</Item>
+      <Item key="Modeling">모델링</Item>
+      <Item key="Personal Shopper">퍼스널 쇼퍼</Item>
+      <Item key="Tattoo Art">타투 아트</Item>
+      <Item key="K-Beauty">K-뷰티</Item>
+    </SubCategory>
+    <SubCategory name="게임 및 취미">
+      <Item key="Chess">체스</Item>
+      <Item key="Go (Baduk)">바둑</Item>
+      <Item key="Korean Chess (Janggi)">장기</Item>
+      <Item key="Poker">포커</Item>
+      <Item key="Board Games">보드게임</Item>
+      <Item key="Writing">글쓰기</Item>
+      <Item key="Handwriting Correction">글씨 교정</Item>
+      <Item key="Fishing">낚시</Item>
+      <Item key="Drone">드론</Item>
+      <Item key="Darts">다트</Item>
+      <Item key="Juggling">저글링</Item>
+    </SubCategory>
+    <SubCategory name="홈 및 라이프">
+      <Item key="Gardening/Farming">정원/농사</Item>
+      <Item key="Interior Design">인테리어 디자인</Item>
+      <Item key="Organizing/Decluttering">정리/수납</Item>
+      <Item key="Eastern Astrology/Saju">사주/역학</Item>
+      <Item key="DIY Home Repair">DIY 집 수리</Item>
+      <Item key="Tarot Cards">타로 카드</Item>
+    </SubCategory>
+  </Category>
+
+  <Category name="키즈 및 유아 교육" icon="child_care">
+    <SubCategory name="읽기 및 파닉스">
+      <Item key="Storytelling (Read Aloud)">스토리텔링(낭독)</Item>
+      <Item key="Sight Words Games">사이트 워드 게임</Item>
+      <Item key="Phonics">파닉스</Item>
+      <Item key="Reading Support (Dyslexia)">읽기 지원(난독증)</Item>
+      <Item key="Vocabulary Games">어휘 게임</Item>
+    </SubCategory>
+    <SubCategory name="재미 수학">
+      <Item key="Board Game Math (Add/Sub)">보드게임 수학(덧셈/뺄셈)</Item>
+      <Item key="Money Concepts (Market Play)">돈 개념(시장 놀이)</Item>
+      <Item key="Multiplication Songs">구구단 노래</Item>
+      <Item key="Number Sense">수 감각</Item>
+    </SubCategory>
+    <SubCategory name="손글씨">
+      <Item key="Pencil Grip Correction">연필 잡기 교정</Item>
+      <Item key="Cursive Writing">필기체</Item>
+      <Item key="Print Writing Practice">정자 쓰기 연습</Item>
+    </SubCategory>
+    <SubCategory name="창의성 및 감각 놀이">
+      <Item key="Messy &amp; Sensory">메시 &amp; 감각 놀이</Item>
+      <Item key="Kids Art">키즈 아트</Item>
+      <Item key="Kids Music">키즈 음악</Item>
+    </SubCategory>
+    <SubCategory name="액티브 키즈">
+      <Item key="Bike">자전거</Item>
+      <Item key="Inline">인라인</Item>
+      <Item key="Scooter">스쿠터</Item>
+      <Item key="Jump Rope Tricks">줄넘기 트릭</Item>
+      <Item key="Soccer">축구</Item>
+      <Item key="T-Ball">T볼</Item>
+      <Item key="Basketball">농구</Item>
+      <Item key="Ballet">발레</Item>
+      <Item key="K-Pop">K-Pop</Item>
+      <Item key="Kids Yoga">키즈 요가</Item>
+      <Item key="Meditation">명상</Item>
+      <Item key="Creative Movement">창의적 움직임</Item>
+    </SubCategory>
+    <SubCategory name="STEM 및 논리">
+      <Item key="Lego">레고</Item>
+      <Item key="Block Coding (Scratch Jr.)">블록 코딩(스크래치 주니어)</Item>
+      <Item key="Robot Building">로봇 만들기</Item>
+      <Item key="Simple Science Experiments">간단한 과학 실험</Item>
+      <Item key="Chess">체스</Item>
+      <Item key="Rubik's Cube">루빅스 큐브</Item>
+      <Item key="Checkers">체커</Item>
+      <Item key="Board Game">보드게임</Item>
+    </SubCategory>
+    <SubCategory name="언어 놀이">
+      <Item key="Korean">한국어</Item>
+      <Item key="Spanish">스페인어</Item>
+      <Item key="Chinese">중국어</Item>
+      <Item key="Vietnamese">베트남어</Item>
+      <Item key="German">독일어</Item>
+      <Item key="English">영어</Item>
+      <Item key="Hindi">힌디어</Item>
+      <Item key="Telugu">텔루구어</Item>
+      <Item key="Tamil">타밀어</Item>
+    </SubCategory>
+    <SubCategory name="문화">
+      <Item key="Dumpling Making">만두 만들기</Item>
+      <Item key="Taco Making">타코 만들기</Item>
+      <Item key="Holiday Crafts">홀리데이 공예</Item>
+    </SubCategory>
+    <SubCategory name="사회성 및 특별 지원">
+      <Item key="Social Role Play">사회적 역할 놀이</Item>
+      <Item key="Emotional Regulation &amp; Expression">정서 조절 및 표현</Item>
+      <Item key="Making Friends">친구 만들기</Item>
+    </SubCategory>
+    <SubCategory name="지원">
+      <Item key="Homework">숙제</Item>
+      <Item key="Shadowing">섀도잉</Item>
+    </SubCategory>
+  </Category>
+</RadiusHubData>

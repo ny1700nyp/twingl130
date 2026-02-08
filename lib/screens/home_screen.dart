@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../services/category_service.dart';
 import '../services/supabase_service.dart';
 import '../widgets/avatar_with_type_badge.dart';
 import '../widgets/twingl_wordmark.dart';
@@ -334,8 +335,9 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
     ({List<String> goalTalent, List<String> talentGoal}) chips,
   ) {
+    final locale = Localizations.localeOf(context);
     final list = <Widget>[];
-    for (final label in chips.goalTalent) {
+    for (final key in chips.goalTalent) {
       list.add(
         Padding(
           padding: const EdgeInsets.only(right: 4, bottom: 2),
@@ -347,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
               border: Border.all(color: AppTheme.twinglPurple, width: 1),
             ),
             child: Text(
-              label,
+              CategoryService.getDisplayLabel(key, locale),
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
@@ -358,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-    for (final label in chips.talentGoal) {
+    for (final key in chips.talentGoal) {
       list.add(
         Padding(
           padding: const EdgeInsets.only(right: 4, bottom: 2),
@@ -370,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
               border: Border.all(color: AppTheme.twinglMint, width: 1),
             ),
             child: Text(
-              label,
+              CategoryService.getDisplayLabel(key, locale),
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w500,

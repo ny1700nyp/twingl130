@@ -87,6 +87,13 @@ flutter:
   assets:
     - assets/category.txt
     - assets/categories.xml
+    - assets/categories_en.xml
+    - assets/categories_ko.xml
+    - assets/categories_ja.xml
+    - assets/categories_zh.xml
+    - assets/categories_de.xml
+    - assets/categories_es.xml
+    - assets/categories_fr.xml
     - assets/quotes.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
