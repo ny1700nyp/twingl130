@@ -373,7 +373,7 @@ class AppLocalizationsKo extends AppLocalizations {
       'Twingl의 모든 것: 아는 것을 가르치고 좋아하는 것을 배우세요. 커뮤니티의 중심이에요.';
 
   @override
-  String get becomeStudentToo => '학습자도 되기';
+  String get becomeStudentToo => '학생도 되기';
 
   @override
   String get becomeTutorToo => '튜터도 되기';
@@ -387,7 +387,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '가르치는 것이 실력을 키우는 가장 좋은 방법이에요. 이웃과 재능을 나눠 보세요.';
 
   @override
-  String get unlockStudentMode => '학습자 모드 사용하기';
+  String get unlockStudentMode => '학생 모드 사용하기';
 
   @override
   String get unlockTutorMode => '튜터 모드 사용하기';
@@ -408,14 +408,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String get fellowTutorsInArea => '내 주변 튜터';
 
   @override
-  String get studentCandidatesInArea => '내 주변 학습자';
+  String get studentCandidatesInArea => '내 주변 학생';
 
   @override
   String get noTutorsYet =>
       '아직 튜터가 없어요. 내 주변 튜터 만나기나 어디서나 맞는 튜터에서 좋아요를 눌러 보세요.';
 
   @override
-  String get noStudentsYet => '아직 학습자가 없어요. 내 주변 학습자나 채팅에서 좋아요를 눌러 보세요.';
+  String get noStudentsYet => '아직 학생이 없어요. 내 주변 학생이나 채팅에서 좋아요를 눌러 보세요.';
 
   @override
   String get noFellowsYet => '아직 내 주변 튜터가 없어요. 내 주변 튜터에서 좋아요를 눌러 보세요.';
@@ -427,7 +427,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get learnShareConnect => '배우고, 나누고, 연결하세요.';
 
   @override
-  String get student => '학습자';
+  String get student => '학생';
 
   @override
   String get tutor => '튜터';
@@ -587,7 +587,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tabTutors => '튜터';
 
   @override
-  String get tabStudents => '학습자';
+  String get tabStudents => '학생';
 
   @override
   String get tabFellows => '주변 튜터';
